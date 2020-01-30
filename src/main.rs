@@ -1,9 +1,14 @@
+use std::fs;
 
 
 enum Variable {
     Frac(i32),
     Array(i32),
     Str(i32)
+}
+
+struct VarArray {
+    memory: &Vec<Variable>
 }
 
 enum Instruction {
@@ -53,6 +58,27 @@ impl Scope {
 }
 
 
+
+
+struct Token {
+    type_: String,
+    string_: String,
+    line: usize,
+    col: usize
+}
+
+fn tokenise(data: &String) -> Vec<Token> {
+
+    let bytes = data.as_bytes();
+    let mut pos = 0;
+    while pos < bytes.len() {
+        print!("{} ", bytes[pos]);
+        pos += 1
+    }
+
+    Vec::new()
+}
+
 fn main() {
     let code = vec![
         Instruction::LoadLocal {idx: 0},
@@ -76,7 +102,12 @@ fn main() {
         locals,
         consts
     };
-    scope.run()
+    scope.run();
     
+    let src = fs::read_to_string("src/main.rs")
+        .expect("File io error");
+
+    //let tokens = tokenise(&src);
+
 
 }
