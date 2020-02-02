@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use std::fs;
-use std::fmt;
 
 
 #[derive(Debug)]
@@ -10,20 +9,17 @@ enum Variable {
     Array(Box<Vec<Variable>>)
 }
 
-impl fmt::Display for Variable{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Variable::Frac(valbox) => write!(f, "Frac({})", *valbox),
-            Variable::Array(_) => write!(f, "Array(...)")
-        }
+impl Variable {
+    fn new_frac(val: i32) -> Variable {
+        Variable::Frac(Box::new(val))
     }
 }
 
 enum Instruction {
     LoadConst{idx: u16},
     LoadLocal{idx: u16},
-    SetLocal{val: i32},
-    StoreLocal{idx: u16}
+    StoreLocal{idx: u16},
+    Add
 }
 
 #[derive(Debug)]
@@ -49,6 +45,7 @@ impl Scope {
                 Instruction::LoadConst{idx} => self.load_const(idx),
                 Instruction::LoadLocal{idx} => self.load_local(idx),
                 Instruction::StoreLocal{idx} => self.store_local(idx),
+                Instruction::Add => self.add(),
                 _ => println!("BLANK()"),
 
             }
@@ -62,9 +59,7 @@ impl Scope {
             Variable::Frac(valbox) => {
                 self.stack.push(
                     StackObject::Variable(
-                        Variable::Frac(
-                            Box::new(**valbox)
-                        )
+                        Variable::new_frac(**valbox)
                     )
                 );
             }
@@ -81,12 +76,30 @@ impl Scope {
     }
 
     fn store_local(&mut self, idx: u16) {
-        let obj = self.stack.pop().expect("Popped off empty stack");
-        match obj {
-            StackObject::Variable(var) => {
-                self.locals[idx as usize] = var;
-            },
-            _ => panic!("Excpected to pop a variable off the stack, found something else!")
+        self.locals[idx as usize] = self.pop_variable();
+    }
+
+    fn add(&mut self) {
+        let args = (self.pop_variable(), self.pop_variable());
+        self.stack.push(StackObject::Variable(
+            match args {
+                (Variable::Frac(right), Variable::Frac(left)) => {
+                    Variable::Frac(Box::new(*left + *right))
+                }
+                (Variable::Array(_), Variable::Array(_)) => Variable::Frac(Box::new(0)),
+                _ => panic!("Adding incompatible types")
+            }
+        ));
+    }
+
+    fn pop(&mut self) -> StackObject {
+        self.stack.pop().expect("Popped off empty stack")
+    }
+
+    fn pop_variable(&mut self) -> Variable {
+        match self.pop() {
+            StackObject::Variable(var) => var,
+            _ => panic!("Tried to pop a variable off the stack, found something else")
         }
     }
 }
@@ -115,7 +128,12 @@ fn tokenise(data: &String) -> Vec<Token> {
 fn main() {
     let code = vec![
         Instruction::LoadConst {idx: 0},
-        Instruction::StoreLocal {idx: 1}
+        Instruction::StoreLocal {idx: 1},
+        
+        Instruction::LoadConst {idx: 0},
+        Instruction::LoadConst {idx: 0},
+        Instruction::Add,
+        Instruction::StoreLocal {idx: 0},
     ];
 
     let locals = vec![
@@ -135,9 +153,16 @@ fn main() {
         locals,
         consts
     };
+
+    println!("Before run:");
+    println!("Stack = {:?}", scope.stack);
+    println!("Locals = {:?}", scope.locals);
+
     scope.run();
 
-    println!("Stack[0] = {:?}", scope.locals);
+    println!("After run:");
+    println!("Stack = {:?}", scope.stack);
+    println!("Locals = {:?}", scope.locals);
     
     /*let src = fs::read_to_string("src/main.rs")
         .expect("File io error");
