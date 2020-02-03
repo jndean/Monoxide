@@ -4,22 +4,18 @@ use std::fmt;
 extern crate num_rational;
 extern crate num_bigint;
 
-type Fraction = num_rational::BigRational;
+pub type Fraction = num_rational::BigRational;
 type BigInt = num_bigint::BigInt;
 
-/*impl fmt::Display for Fraction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 
-    }
-}*/
-
+#[derive(PartialEq)]
 pub enum Variable {
     Frac(Box<Fraction>),
     Array(Box<Vec<Variable>>)
 }
 
 impl Variable {
-    fn new_frac(val: Fraction) -> Variable {
+    pub fn new_frac(val: Fraction) -> Variable {
         Variable::Frac(Box::new(val))
     }
 
@@ -34,12 +30,19 @@ impl fmt::Debug for Variable {
     }
 }
 
+/*
+impl PartialEq for Variable {
+    fn eq(&self, other: Variable&)
+}*/
 
+#[derive(Debug)]
 pub enum Instruction {
     LoadConst{idx: u16},
     LoadLocal{idx: u16},
     StoreLocal{idx: u16},
     BinopAdd,
+    BinopSub,
+    BinopMul,
     BinopDiv
 }
 

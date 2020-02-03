@@ -1,14 +1,29 @@
 
-mod interpreter;
+use crate::interpreter;
 
-trait Expression {
+
+/*trait Expression {
     fn compile() -> Vec<interpreter::Instruction>;
+}*/
+
+
+
+pub enum ExpressionNode {
+    Fraction(Box<FractionNode>),
+    Binop(Box<BinopNode>)
 }
 
-enum Literal {
-    Frac()
+pub struct FractionNode {
+    pub value: interpreter::Fraction
 }
 
-struct Binop {
 
+pub enum Binop {
+    Add, Sub, Mul, Div
+}
+
+pub struct BinopNode {
+    pub lhs: ExpressionNode,
+    pub rhs: ExpressionNode,
+    pub op: Binop
 }

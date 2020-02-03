@@ -6,6 +6,8 @@ use std::fs;
 
 mod tokeniser;
 mod interpreter;
+mod AST;
+mod compiler;
 
 type Fraction = num_rational::BigRational;
 type BigInt = num_bigint::BigInt;
@@ -40,7 +42,7 @@ fn main() {
         consts
     };
 
-    println!("Before run:");
+    /*println!("Before run:");
     println!("Stack = {:?}", scope.stack);
     println!("Locals = {:?}", scope.locals);
 
@@ -48,11 +50,24 @@ fn main() {
 
     println!("After run:");
     println!("Stack = {:?}", scope.stack);
-    println!("Locals = {:?}", scope.locals);
+    println!("Locals = {:?}", scope.locals);*/
     
     /*let src = fs::read_to_string("src/main.rs")
         .expect("File io error");
     let tokens = tokeniser::tokenise(&src);*/
 
+
+    let mut compiler = compiler::CompilerCtx::new();
+
+    let eleven = AST::FractionNode{value: Fraction::from(BigInt::from(11))};
+    let twelve = AST::FractionNode{value: Fraction::from(BigInt::from(12))};
+    let add = AST::BinopNode {
+        lhs: AST::ExpressionNode::Fraction(Box::new(eleven)),
+        rhs: AST::ExpressionNode::Fraction(Box::new(twelve)),
+        op: AST::Binop::Add
+    };
+    let code = add.compile(&mut compiler);
+    println!("ctx: {:#?}", compiler);
+    println!("code: {:#?}", code);
 
 }
