@@ -52,9 +52,10 @@ fn main() {
     println!("Stack = {:?}", scope.stack);
     println!("Locals = {:?}", scope.locals);*/
     
-    /*let src = fs::read_to_string("src/main.rs")
+    let src = fs::read_to_string("examples/tmp.mono")
         .expect("File io error");
-    let tokens = tokeniser::tokenise(&src);*/
+    let tokens = tokeniser::tokenise(&src);
+    println!("{:#?}", tokens);
 
 
     let mut compiler = compiler::CompilerCtx::new();

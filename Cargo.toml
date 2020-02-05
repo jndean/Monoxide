@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 num-rational = "0.2.3"
 num-bigint = "0.2.6"
+regex = "1"
