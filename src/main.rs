@@ -6,14 +6,14 @@ use std::fs;
 
 mod tokeniser;
 mod interpreter;
-mod AST;
+mod ast;
 mod compiler;
 
 type Fraction = num_rational::BigRational;
 type BigInt = num_bigint::BigInt;
 
 fn main() {
-    let code = vec![
+    let main_code = vec![
         interpreter::Instruction::LoadConst {idx: 0},
         interpreter::Instruction::StoreLocal {idx: 1},
         
@@ -23,24 +23,19 @@ fn main() {
         interpreter::Instruction::StoreLocal {idx: 0},
     ];
 
-    let locals = vec![
-        interpreter::Variable::Frac(Box::new(Fraction::from(BigInt::from(0)))),
-        interpreter::Variable::Frac(Box::new(Fraction::from(BigInt::from(1)))),
-        interpreter::Variable::Frac(Box::new(Fraction::from(BigInt::from(2))))
+    let main_consts = vec![
+        interpreter::Variable::Frac(Fraction::from(BigInt::from(9))),
+        interpreter::Variable::Frac(Fraction::from(BigInt::from(5)))
     ];
 
-    let consts = vec![
-        interpreter::Variable::Frac(Box::new(Fraction::from(BigInt::from(9)))),
-        interpreter::Variable::Frac(Box::new(Fraction::from(BigInt::from(5))))
+    let functions = vec![
+        interpreter::Function{code: main_code, consts: main_consts, num_locals: 2}
     ];
 
-    let mut scope = interpreter::Scope{
-        code,
-        ip: 0,
-        stack: Vec::new(),
-        locals,
-        consts
-    };
+    let mut interpreter = interpreter::Interpreter::new(&functions, 0);
+    interpreter.run();
+
+    //println!("{:#?}", interpreter);
 
     /*println!("Before run:");
     println!("Stack = {:?}", scope.stack);
@@ -57,18 +52,18 @@ fn main() {
     let tokens = tokeniser::tokenise(&src);
     println!("{:#?}", tokens);
 
-
+    /*
     let mut compiler = compiler::CompilerCtx::new();
 
-    let eleven = AST::FractionNode{value: Fraction::from(BigInt::from(11))};
-    let twelve = AST::FractionNode{value: Fraction::from(BigInt::from(12))};
-    let add = AST::BinopNode {
-        lhs: AST::ExpressionNode::Fraction(Box::new(eleven)),
-        rhs: AST::ExpressionNode::Fraction(Box::new(twelve)),
-        op: AST::Binop::Add
+    let eleven = ast::FractionNode{value: Fraction::from(BigInt::from(11))};
+    let twelve = ast::FractionNode{value: Fraction::from(BigInt::from(12))};
+    let add = ast::BinopNode {
+        lhs: ast::ExpressionNode::Fraction(Box::new(eleven)),
+        rhs: ast::ExpressionNode::Fraction(Box::new(twelve)),
+        op: ast::Binop::Add
     };
     let code = add.compile(&mut compiler);
     println!("ctx: {:#?}", compiler);
-    println!("code: {:#?}", code);
+    println!("code: {:#?}", code);*/
 
 }

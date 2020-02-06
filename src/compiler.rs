@@ -1,5 +1,5 @@
 
-use crate::AST;
+use crate::ast;
 use crate::interpreter;
 use interpreter::Instruction;
 
@@ -17,26 +17,26 @@ impl CompilerCtx {
         CompilerCtx{consts: Vec::new(), locals: Vec::new(), local_use_names: Vec::new()}
     }
 
-    fn add_const(&mut self, val: interpreter::Variable) -> u16 {
+    fn add_const(&mut self, val: interpreter::Variable) -> usize {
         for (i, existing) in self.consts.iter().enumerate() {
-            if *existing == val {return i as u16}
+            if *existing == val {return i}
         }
         self.consts.push(val);
-        (self.consts.len() - 1) as u16
+        self.consts.len() - 1
     }
 }
 
 
-impl AST::ExpressionNode {
+impl ast::ExpressionNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
         match &self {
-            AST::ExpressionNode::Fraction(valbox) => valbox.compile(ctx),
-            AST::ExpressionNode::Binop(valbox) => valbox.compile(ctx)
+            ast::ExpressionNode::Fraction(valbox) => valbox.compile(ctx),
+            ast::ExpressionNode::Binop(valbox) => valbox.compile(ctx)
         }
     }
 }
 
-impl AST::FractionNode {
+impl ast::FractionNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
         let idx = ctx.add_const(
             interpreter::Variable::new_frac(self.value.clone())
@@ -46,17 +46,17 @@ impl AST::FractionNode {
 }
 
 
-impl AST::BinopNode {
+impl ast::BinopNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
         let mut ret = Vec::new();
         ret.extend(self.lhs.compile(ctx));
         ret.extend(self.rhs.compile(ctx));
         ret.push(
             match self.op {
-                AST::Binop::Add => Instruction::BinopAdd,
-                AST::Binop::Sub => Instruction::BinopSub,
-                AST::Binop::Mul => Instruction::BinopMul,
-                AST::Binop::Div => Instruction::BinopDiv,
+                ast::Binop::Add => Instruction::BinopAdd,
+                ast::Binop::Sub => Instruction::BinopSub,
+                ast::Binop::Mul => Instruction::BinopMul,
+                ast::Binop::Div => Instruction::BinopDiv,
             }
         );
         ret
