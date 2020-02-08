@@ -39,7 +39,7 @@ impl ast::ExpressionNode {
 impl ast::FractionNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
         let idx = ctx.add_const(
-            interpreter::Variable::new_frac(self.value.clone())
+            interpreter::Variable::Frac(self.value.clone())
         );
         vec![Instruction::LoadConst{idx}]
     }
