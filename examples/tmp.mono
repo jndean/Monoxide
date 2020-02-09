@@ -1,2 +1,7 @@
-hello there
-let x be 5
+
+func main(argv)()
+  do
+    x = 9
+    x += 5
+  undo
+return ()

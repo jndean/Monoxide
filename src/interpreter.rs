@@ -1,7 +1,6 @@
 
 use std::fmt;
 use std::mem::replace;
-use std::convert::TryInto;
 
 extern crate num_rational;
 extern crate num_bigint;
@@ -31,13 +30,22 @@ pub enum Instruction {
     LoadConst{idx: usize},
     LoadLocal{idx: usize},
     StoreLocal{idx: usize},
-    ModopAdd{idx: usize},
     BinopAdd,
     BinopSub,
     BinopMul,
     BinopDiv,
-    Reverse
+    Reverse,
+    IJump{delta: isize},  // Instruction Jump //
+    SJump{delta: isize},  // Statement Jump //
+    IJumpIfBackwards{delta: isize},
+    SJumpIfBackwards{delta: isize},
+    EndStmt,
+    Quit,
+    DebugPrint,
 }
+
+pub type Statement = Vec<Instruction>;
+
 
 #[derive(Debug)]
 pub enum StackObject<'s> {
@@ -50,14 +58,15 @@ pub enum StackObject<'s> {
 
 #[derive(Debug)]
 pub struct Interpreter<'a> {
-    pub functions: &'a Vec<Function>,
-    pub stack: Vec<StackObject<'a>>,
+    functions: &'a Vec<Function>,
+    stack: Vec<StackObject<'a>>,
 
-    pub code: &'a Vec<Instruction>,
-    pub ip: isize,
-    pub backwards: bool,
-    pub locals: Vec<Option<Variable>>,
-    pub consts: &'a Vec<Variable>,
+    code: &'a Vec<Statement>,
+    stmt_pos: usize,
+    inst_pos: usize,
+    forwards: bool,
+    locals: Vec<Option<Variable>>,
+    consts: &'a Vec<Variable>,
 
     scope_stack: Vec<Scope<'a>>
 }
@@ -65,9 +74,9 @@ pub struct Interpreter<'a> {
 
 #[derive(Debug)]
 pub struct Scope<'a> {
-    code: &'a Vec<Instruction>,
-    ip: isize,
-    backwards: bool,
+    code: &'a Vec<Statement>,
+    stmt_pos: usize,
+    forwards: bool,
     locals: Vec<Option<Variable>>,
     consts: &'a Vec<Variable>
 }
@@ -75,7 +84,7 @@ pub struct Scope<'a> {
 
 #[derive(Debug)]
 pub struct Function {
-    pub code: Vec<Instruction>,
+    pub code: Vec<Statement>,
     pub consts: Vec<Variable>,
     pub num_locals: usize
 }
@@ -89,8 +98,9 @@ impl<'a> Interpreter<'a> {
             functions,
             stack: Vec::new(),
             code: &main.code,
-            ip: 0,
-            backwards: false,
+            stmt_pos: 0,
+            inst_pos: 0,
+            forwards: true,
             locals: vec![None; main.num_locals],
             consts: &main.consts,
             scope_stack: Vec::new()
@@ -98,53 +108,65 @@ impl<'a> Interpreter<'a> {
     }
 
     pub fn run(&mut self) -> () {
-        let code_len = self.code.len().try_into().unwrap();
-        while (0 <= self.ip) & (self.ip < code_len) {
-            match self.code[self.ip as usize] {
-                Instruction::LoadConst{idx} => self.load_const(idx),
-                Instruction::LoadLocal{idx} => self.load_local(idx),
-                Instruction::StoreLocal{idx} => self.store_local(idx),
-                Instruction::ModopAdd{idx} => self.modop(idx, Instruction::BinopAdd),
-                Instruction::BinopAdd => self.binop_add(),
-                Instruction::BinopDiv => self.binop_div(),
-                Instruction::Reverse => self.reverse(),
-                _ => println!("BLANK()"),
-            }
+        'statement_loop: loop {
+            let instructions = &self.code[self.stmt_pos];
 
-            self.ip += if self.backwards {-1} else {1};
+            'instruction_loop: loop {
+                match &instructions[self.inst_pos] {
+                    Instruction::LoadConst{idx} => self.load_const(*idx),
+                    Instruction::LoadLocal{idx} => self.load_local(*idx),
+                    Instruction::StoreLocal{idx} => self.store_local(*idx),
+                    Instruction::BinopAdd => self.binop_add(),
+                    Instruction::BinopSub => self.binop_sub(),
+                    Instruction::BinopMul => self.binop_mul(),
+                    Instruction::BinopDiv => self.binop_div(),
+                    Instruction::Reverse => self.reverse(),
+                    Instruction::DebugPrint => self.debug_print(),
+                    Instruction::SJump{delta} => self.s_jump(*delta),
+                    Instruction::SJumpIfBackwards{delta} => if !self.forwards { self.s_jump(*delta) },
+                    Instruction::IJump{delta} => self.i_jump(*delta),
+                    Instruction::IJumpIfBackwards{delta} => if !self.forwards { self.i_jump(*delta) },
+                    
+                    Instruction::EndStmt => {
+                        if self.forwards { self.s_jump(1) } else { self.s_jump(-1) };
+                        break 'instruction_loop;
+                    },
+                    Instruction::Quit => {
+                        break 'statement_loop;
+                    }
+                }
+
+                self.inst_pos += 1;
+            }
         }
     }
 
-    pub fn initialise_function(&mut self, idx: usize, backwards: bool) {
+    pub fn initialise_function(&mut self, idx: usize, forwards: bool) {
         let func = &self.functions[idx];
         self.scope_stack.push(
             Scope{
                 code  : replace(&mut self.code  , &func.code  ),
                 consts: replace(&mut self.consts, &func.consts),
                 locals: replace(&mut self.locals, vec![None; func.num_locals]),
-                ip: self.ip,
-                backwards: self.backwards,
+                stmt_pos: self.stmt_pos,
+                forwards: self.forwards,
             }
         );
-        self.backwards = backwards;
-        self.ip = if backwards {
-            let code_len: isize = func.code.len().try_into().unwrap();
-            code_len - 1
-        } else {0}
+        self.forwards = forwards;
+        self.stmt_pos = if forwards {0} else {func.code.len() - 1};
     }
-    
-    fn modop(&mut self, idx: usize, op: Instruction) {
-        if self.backwards {
-            
-        } else {
-            self.load_local(idx);
-            self.binop_add();
-            self.store_local(idx);
-        }
+
+    fn i_jump(&mut self, delta: isize) {
+        self.inst_pos = ((self.inst_pos as isize) + delta) as usize;
+    }
+
+    fn s_jump(&mut self, delta: isize) {
+        self.inst_pos = 0;
+        self.stmt_pos = ((self.stmt_pos as isize) + delta) as usize;        
     }
 
     fn reverse(&mut self) {
-        self.backwards = !self.backwards;
+        self.forwards = !self.forwards;
     }
 
     fn load_const(&mut self, idx: usize) {
@@ -177,6 +199,36 @@ impl<'a> Interpreter<'a> {
 
         self.stack.push(StackObject::FreeVar(result));
     }
+    
+    fn binop_sub(&mut self) {
+        let rhs = self.pop();
+        let lhs = self.pop();
+        let lhs: &Variable = self.stackvar_asref(&lhs);
+        let rhs: &Variable = self.stackvar_asref(&rhs);
+
+        let result = match (lhs, rhs) {
+            (Variable::Frac(left), Variable::Frac(right)) => Variable::Frac(left - right),
+            (Variable::Array(_), Variable::Array(_)) => unimplemented!(),
+            _ => panic!("Adding incompatible types")
+        };
+
+        self.stack.push(StackObject::FreeVar(result));
+    }
+
+    fn binop_mul(&mut self) {
+        let rhs = self.pop();
+        let lhs = self.pop();
+        let lhs: &Variable = self.stackvar_asref(&lhs);
+        let rhs: &Variable = self.stackvar_asref(&rhs);
+
+        let result = match (lhs, rhs) {
+            (Variable::Frac(left), Variable::Frac(right)) => Variable::Frac(left * right),
+            (Variable::Array(_), Variable::Array(_)) => unimplemented!(),
+            _ => panic!("Adding incompatible types")
+        };
+
+        self.stack.push(StackObject::FreeVar(result));
+    }
 
     fn binop_div(&mut self) {
         let rhs = self.pop();
@@ -187,7 +239,7 @@ impl<'a> Interpreter<'a> {
         let result = match (lhs, rhs) {
             (Variable::Frac(left), Variable::Frac(right)) => Variable::Frac(left / right),
             (Variable::Array(_), Variable::Array(_)) => unimplemented!(),
-            _ => panic!("Adding incompatible types")
+            _ => panic!("Dividing incompatible types")
         };
 
         self.stack.push(StackObject::FreeVar(result));
@@ -203,6 +255,10 @@ impl<'a> Interpreter<'a> {
             StackObject::LocalVar(idx) => self.locals[*idx].as_ref().unwrap(),
             StackObject::FreeVar(var) => &var,
         }
+    }
+
+    fn debug_print(&self) {
+        println!("Locals: {:#?}", self.locals);
     }
 }
 

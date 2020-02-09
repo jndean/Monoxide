@@ -8,19 +8,39 @@ mod tokeniser;
 mod interpreter;
 mod ast;
 mod compiler;
+use interpreter::{Instruction, Statement};
 
 type Fraction = num_rational::BigRational;
 type BigInt = num_bigint::BigInt;
 
 fn main() {
-    let main_code = vec![
-        interpreter::Instruction::LoadConst {idx: 0},
-        interpreter::Instruction::StoreLocal {idx: 0},
-        
-        interpreter::Instruction::LoadLocal {idx: 0},
-        interpreter::Instruction::LoadConst {idx: 1},
-        interpreter::Instruction::BinopDiv,
-        interpreter::Instruction::StoreLocal {idx: 1},
+    let main_code: Vec<Statement> = vec![
+        vec![
+            Instruction::SJumpIfBackwards{delta: 6},
+            Instruction::EndStmt
+        ],
+        vec![
+            Instruction::IJumpIfBackwards {delta: 2},
+            Instruction::LoadConst {idx: 0},
+            Instruction::StoreLocal {idx: 0},
+            Instruction::EndStmt
+        ],
+        vec![Instruction::DebugPrint, Instruction::EndStmt],
+        vec![
+            Instruction::LoadLocal {idx: 0},
+            Instruction::LoadConst {idx: 1},
+            Instruction::IJumpIfBackwards{delta: 2},
+            Instruction::BinopAdd,
+            Instruction::IJump{delta: 1},
+            Instruction::BinopSub,
+            interpreter::Instruction::StoreLocal {idx: 0},
+            Instruction::EndStmt
+        ],
+        vec![Instruction::DebugPrint, Instruction::EndStmt],
+        vec![Instruction::Reverse, Instruction::EndStmt],
+        vec![
+            Instruction::Quit
+        ]
     ];
 
     let main_consts = vec![
