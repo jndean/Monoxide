@@ -16,16 +16,14 @@ type BigInt = num_bigint::BigInt;
 fn main() {
     let main_code: Vec<Statement> = vec![
         vec![
-            Instruction::SJumpIfBackwards{delta: 6},
-            Instruction::EndStmt
+            Instruction::SJumpIfBackwards{delta: 6}
         ],
         vec![
             Instruction::IJumpIfBackwards {delta: 2},
             Instruction::LoadConst {idx: 0},
-            Instruction::StoreLocal {idx: 0},
-            Instruction::EndStmt
+            Instruction::StoreLocal {idx: 0}
         ],
-        vec![Instruction::DebugPrint, Instruction::EndStmt],
+        vec![Instruction::DebugPrint],
         vec![
             Instruction::LoadLocal {idx: 0},
             Instruction::LoadConst {idx: 1},
@@ -33,14 +31,10 @@ fn main() {
             Instruction::BinopAdd,
             Instruction::IJump{delta: 1},
             Instruction::BinopSub,
-            interpreter::Instruction::StoreLocal {idx: 0},
-            Instruction::EndStmt
+            interpreter::Instruction::StoreLocal {idx: 0}
         ],
-        vec![Instruction::DebugPrint, Instruction::EndStmt],
-        vec![Instruction::Reverse, Instruction::EndStmt],
-        vec![
-            Instruction::Quit
-        ]
+        vec![Instruction::DebugPrint],
+        vec![Instruction::Reverse]
     ];
 
     let main_consts = vec![
@@ -55,7 +49,7 @@ fn main() {
     let mut interpreter = interpreter::Interpreter::new(&functions, 0);
     interpreter.run();
 
-    println!("{:#?}", interpreter);
+    //println!("{:#?}", interpreter);
 
     
     /*let src = fs::read_to_string("examples/tmp.mono")

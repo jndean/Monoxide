@@ -39,7 +39,6 @@ pub enum Instruction {
     SJump{delta: isize},  // Statement Jump //
     IJumpIfBackwards{delta: isize},
     SJumpIfBackwards{delta: isize},
-    EndStmt,
     Quit,
     DebugPrint,
 }
@@ -108,11 +107,29 @@ impl<'a> Interpreter<'a> {
     }
 
     pub fn run(&mut self) -> () {
+
         'statement_loop: loop {
-            let instructions = &self.code[self.stmt_pos];
+
+            let statement = match self.code.get(self.stmt_pos) {
+                Some(stmt) => stmt,
+                None => break
+            };
 
             'instruction_loop: loop {
-                match &instructions[self.inst_pos] {
+
+                let instruction = match statement.get(self.inst_pos) {
+                    Some(inst) => inst,
+                    None => {
+                        if self.forwards { 
+                            self.s_jump(1)
+                        } else { 
+                            self.s_jump(-1)
+                        };
+                        break
+                    }
+                };
+
+                match instruction {
                     Instruction::LoadConst{idx} => self.load_const(*idx),
                     Instruction::LoadLocal{idx} => self.load_local(*idx),
                     Instruction::StoreLocal{idx} => self.store_local(*idx),
@@ -126,14 +143,8 @@ impl<'a> Interpreter<'a> {
                     Instruction::SJumpIfBackwards{delta} => if !self.forwards { self.s_jump(*delta) },
                     Instruction::IJump{delta} => self.i_jump(*delta),
                     Instruction::IJumpIfBackwards{delta} => if !self.forwards { self.i_jump(*delta) },
-                    
-                    Instruction::EndStmt => {
-                        if self.forwards { self.s_jump(1) } else { self.s_jump(-1) };
-                        break 'instruction_loop;
-                    },
-                    Instruction::Quit => {
-                        break 'statement_loop;
-                    }
+
+                    Instruction::Quit => break 'statement_loop
                 }
 
                 self.inst_pos += 1;
@@ -258,7 +269,7 @@ impl<'a> Interpreter<'a> {
     }
 
     fn debug_print(&self) {
-        println!("Locals: {:#?}", self.locals);
+        println!("Locals: {:?}", self.locals);
     }
 }
 
