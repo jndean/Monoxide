@@ -1,7 +1,52 @@
 
-func main(argv)()
-  do
-    x = 9
-    x += 5
-  undo
-return ()
+main [argv] () 
+{
+    while (x > 0) {
+        x /= 2;
+    } ~while (x != 10);
+
+    if (x != 2)
+    {
+        speed *= 2;
+        x *= 2;
+    } 
+    else
+    {
+        speed *= 5;
+    }
+    ~if (x != 4);
+
+    doundo 
+    {
+        sum = 0;
+        for (x : X) 
+        {
+            sum += x;
+        }
+    } 
+    yield 
+    {
+        println("Sum:", sum);
+    };
+} 
+~main;
+
+
+argmax [X] ()
+{
+    .best_idx = 0;
+    .best &= X[0];
+
+    for (.i : [1:#X]) 
+    {
+        if (X[.i] > .best) 
+        {
+            .best = X[.i];
+            .best_idx = .i;
+        }
+        ~if (.best_idx == .i);
+    }
+
+   promote .best_idx => best_idx;
+}
+~argmax (best_idx);

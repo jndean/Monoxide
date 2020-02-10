@@ -37,13 +37,55 @@ fn main() {
         vec![Instruction::Reverse]
     ];
 
+    let loop_code = vec![
+        vec![
+            Instruction::IJumpIfBackwards {delta: 2},
+            Instruction::LoadConst {idx: 0},
+            Instruction::StoreLocal {idx: 0}
+        ],
+    ];
+
+    let array_code = vec![
+        vec![
+            Instruction::IJumpIfBackwards {delta: 2},
+            Instruction::LoadConst {idx: 1},
+            Instruction::StoreLocal {idx: 0}
+        ],
+        vec![
+            Instruction::IJumpIfBackwards {delta: 3},
+            Instruction::LoadConst {idx: 2},
+            Instruction::StoreLocal {idx: 2},
+            Instruction::IJump {delta: 1},
+            Instruction::FreeLocal {idx: 2}
+        ],
+        vec![
+            Instruction::IJumpIfBackwards {delta: 3},
+            Instruction::LoadConst {idx: 2},
+            Instruction::LoadConst {idx: 3},
+            Instruction::LoadConst {idx: 3},
+            Instruction::CreateIndex {size: 2},
+            Instruction::ReadArray,
+            Instruction::StoreLocal {idx: 1},
+        ],
+        vec![Instruction::DebugPrint],
+        //vec![Instruction::Reverse]
+    ];
+
     let main_consts = vec![
         interpreter::Variable::Frac(Fraction::from(BigInt::from(9))),
-        interpreter::Variable::Frac(Fraction::from(BigInt::from(5)))
+        interpreter::Variable::Frac(Fraction::from(BigInt::from(5))),
+        interpreter::Variable::Array(vec![
+            interpreter::Variable::Frac(Fraction::from(BigInt::from(0))),
+            interpreter::Variable::Array(vec![
+                interpreter::Variable::Frac(Fraction::from(BigInt::from(17))),
+                interpreter::Variable::Frac(Fraction::from(BigInt::from(18)))
+            ])
+        ]),
+        interpreter::Variable::Frac(Fraction::from(BigInt::from(1)))
     ];
 
     let functions = vec![
-        interpreter::Function{code: main_code, consts: main_consts, num_locals: 2}
+        interpreter::Function{code: array_code, consts: main_consts, num_locals: 3}
     ];
 
     let mut interpreter = interpreter::Interpreter::new(&functions, 0);

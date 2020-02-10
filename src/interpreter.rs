@@ -1,6 +1,7 @@
 
 use std::fmt;
 use std::mem::replace;
+use num_traits::cast::ToPrimitive;
 
 extern crate num_rational;
 extern crate num_bigint;
@@ -30,6 +31,7 @@ pub enum Instruction {
     LoadConst{idx: usize},
     LoadLocal{idx: usize},
     StoreLocal{idx: usize},
+    FreeLocal{idx: usize},
     BinopAdd,
     BinopSub,
     BinopMul,
@@ -39,6 +41,8 @@ pub enum Instruction {
     SJump{delta: isize},  // Statement Jump //
     IJumpIfBackwards{delta: isize},
     SJumpIfBackwards{delta: isize},
+    CreateIndex{size: usize},
+    ReadArray,
     Quit,
     DebugPrint,
 }
@@ -50,8 +54,8 @@ pub type Statement = Vec<Instruction>;
 pub enum StackObject<'s> {
     FreeVar(Variable),
     LocalVar(usize),
-    ConstVar(&'s Variable),
-    //Index(Vec<usize>)
+    RefVar(&'s Variable),
+    Index(Vec<usize>)
 }
 
 
@@ -133,6 +137,7 @@ impl<'a> Interpreter<'a> {
                     Instruction::LoadConst{idx} => self.load_const(*idx),
                     Instruction::LoadLocal{idx} => self.load_local(*idx),
                     Instruction::StoreLocal{idx} => self.store_local(*idx),
+                    Instruction::FreeLocal{idx} => self.free_local(*idx),
                     Instruction::BinopAdd => self.binop_add(),
                     Instruction::BinopSub => self.binop_sub(),
                     Instruction::BinopMul => self.binop_mul(),
@@ -143,6 +148,8 @@ impl<'a> Interpreter<'a> {
                     Instruction::SJumpIfBackwards{delta} => if !self.forwards { self.s_jump(*delta) },
                     Instruction::IJump{delta} => self.i_jump(*delta),
                     Instruction::IJumpIfBackwards{delta} => if !self.forwards { self.i_jump(*delta) },
+                    Instruction::CreateIndex{size} => self.create_index(*size),
+                    Instruction::ReadArray => self.read_array_and_pop(),
 
                     Instruction::Quit => break 'statement_loop
                 }
@@ -181,7 +188,7 @@ impl<'a> Interpreter<'a> {
     }
 
     fn load_const(&mut self, idx: usize) {
-        self.stack.push(StackObject::ConstVar(&self.consts[idx]));
+        self.stack.push(StackObject::RefVar(&self.consts[idx]));
     }  
 
     fn load_local(&mut self, idx: usize) {
@@ -190,10 +197,47 @@ impl<'a> Interpreter<'a> {
 
     fn store_local(&mut self, idx: usize) {
         self.locals[idx] = Some(match self.pop() {
-            StackObject::ConstVar(var) => var.clone(),
+            StackObject::RefVar(var) => var.clone(),
             StackObject::LocalVar(idx) => self.locals[idx].clone().unwrap(),
-            StackObject::FreeVar(var) => var
+            StackObject::FreeVar(var) => var,
+            _ => panic!("Popped something other than a variable")
         });
+    }
+
+    fn free_local(&mut self, idx: usize) {
+        self.locals[idx] = None;
+    }
+
+    fn create_index(&mut self, size: usize) {
+        let mut list: Vec<usize> = Vec::with_capacity(size);
+        for _ in 0..size {
+            let var = self.pop();
+            list.push(
+                match self.stackvar_asref(&var) {
+                    Variable::Frac(val) => val.to_integer().to_usize().unwrap(),
+                    _ => panic!("Trying to use non-number as array index")
+                }
+            );
+        }
+        self.stack.push(StackObject::Index(list));
+    }
+
+    fn read_array_and_pop(&mut self) {
+        let indices = self.pop();
+        let indices: Vec<usize> = match indices {
+            StackObject::Index(vec) => vec,
+            _ => panic!("Expected index")
+        };
+        let var = self.pop();
+        let mut var_ref: &Variable = self.stackvar_asref(&var);
+        for index in indices.iter() {
+            var_ref = match var_ref {
+                Variable::Array(vector) => &vector[*index],
+                Variable::Frac(_) => panic!("Trying to index into a number")
+            };
+        }
+        let var = StackObject::FreeVar(var_ref.clone());
+        self.stack.push(var);
     }
 
     fn binop_add(&mut self) {
@@ -220,7 +264,7 @@ impl<'a> Interpreter<'a> {
         let result = match (lhs, rhs) {
             (Variable::Frac(left), Variable::Frac(right)) => Variable::Frac(left - right),
             (Variable::Array(_), Variable::Array(_)) => unimplemented!(),
-            _ => panic!("Adding incompatible types")
+            _ => panic!("Subtracting incompatible types")
         };
 
         self.stack.push(StackObject::FreeVar(result));
@@ -235,7 +279,7 @@ impl<'a> Interpreter<'a> {
         let result = match (lhs, rhs) {
             (Variable::Frac(left), Variable::Frac(right)) => Variable::Frac(left * right),
             (Variable::Array(_), Variable::Array(_)) => unimplemented!(),
-            _ => panic!("Adding incompatible types")
+            _ => panic!("Multiplying incompatible types")
         };
 
         self.stack.push(StackObject::FreeVar(result));
@@ -262,14 +306,15 @@ impl<'a> Interpreter<'a> {
 
     fn stackvar_asref(&'a self, var: &'a StackObject) -> &'a Variable {
         match &var {
-            StackObject::ConstVar(var_ref) => *var_ref,
+            StackObject::RefVar(var_ref) => *var_ref,
             StackObject::LocalVar(idx) => self.locals[*idx].as_ref().unwrap(),
             StackObject::FreeVar(var) => &var,
+            _ => panic!()
         }
     }
 
     fn debug_print(&self) {
-        println!("Locals: {:?}", self.locals);
+        println!("Locals: {:?}\nStack: {:?}\n----------", self.locals, self.stack);
     }
 }
 
