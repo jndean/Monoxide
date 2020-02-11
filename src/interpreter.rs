@@ -13,13 +13,17 @@ type BigInt = num_bigint::BigInt;
 #[derive(PartialEq, Clone)]
 pub enum Variable {
     Frac(Fraction),
-    Array(Vec<Variable>)
+    Array(Vec<Variable>),
+    LocalArrayRef(usize, Vec<usize>)
 }
 
 impl fmt::Debug for Variable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Variable::Frac(val) => write!(f, "{}", val),
+            Variable::LocalArrayRef(register, indices) => {
+                write!(f, "LocalArrayRef({}, {:?})", register, indices)
+            },
             Variable::Array(_) => write!(f, "Array(...)")
         }
     }
@@ -41,8 +45,9 @@ pub enum Instruction {
     SJump{delta: isize},  // Statement Jump //
     IJumpIfBackwards{delta: isize},
     SJumpIfBackwards{delta: isize},
-    CreateIndex{size: usize},
-    ReadArray,
+    CreateArrayRef{size: usize},
+    ArrayLookup,
+    ArrayLookupNoPop,
     Quit,
     DebugPrint,
 }
@@ -54,8 +59,7 @@ pub type Statement = Vec<Instruction>;
 pub enum StackObject<'s> {
     FreeVar(Variable),
     LocalVar(usize),
-    RefVar(&'s Variable),
-    Index(Vec<usize>)
+    RefVar(&'s Variable)
 }
 
 
@@ -148,8 +152,9 @@ impl<'a> Interpreter<'a> {
                     Instruction::SJumpIfBackwards{delta} => if !self.forwards { self.s_jump(*delta) },
                     Instruction::IJump{delta} => self.i_jump(*delta),
                     Instruction::IJumpIfBackwards{delta} => if !self.forwards { self.i_jump(*delta) },
-                    Instruction::CreateIndex{size} => self.create_index(*size),
-                    Instruction::ReadArray => self.read_array_and_pop(),
+                    Instruction::CreateArrayRef{size} => self.create_array_lookup(*size),
+                    Instruction::ArrayLookup => self.array_lookup(),
+                    Instruction::ArrayLookupNoPop => self.array_lookup_nopop(),
 
                     Instruction::Quit => break 'statement_loop
                 }
@@ -208,43 +213,51 @@ impl<'a> Interpreter<'a> {
         self.locals[idx] = None;
     }
 
-    fn create_index(&mut self, size: usize) {
+    fn create_array_lookup(&mut self, size: usize) {
         let mut list: Vec<usize> = Vec::with_capacity(size);
         for _ in 0..size {
             let var = self.pop();
             list.push(
-                match self.stackvar_asref(&var) {
+                match self.stackobj_as_var(&var) {
                     Variable::Frac(val) => val.to_integer().to_usize().unwrap(),
                     _ => panic!("Trying to use non-number as array index")
                 }
             );
         }
-        self.stack.push(StackObject::Index(list));
+        list.reverse();
+        let array_register = self.pop();
+        let array_register = match array_register {
+            StackObject::LocalVar(register) => register,
+            _ => unreachable!()
+        };
+        self.stack.push(
+            StackObject::FreeVar(
+                Variable::LocalArrayRef(array_register, list)
+            )
+        );
     }
 
-    fn read_array_and_pop(&mut self) {
-        let indices = self.pop();
-        let indices: Vec<usize> = match indices {
-            StackObject::Index(vec) => vec,
-            _ => panic!("Expected index")
-        };
-        let var = self.pop();
-        let mut var_ref: &Variable = self.stackvar_asref(&var);
-        for index in indices.iter() {
-            var_ref = match var_ref {
-                Variable::Array(vector) => &vector[*index],
-                Variable::Frac(_) => panic!("Trying to index into a number")
-            };
-        }
-        let var = StackObject::FreeVar(var_ref.clone());
+    fn array_lookup(&mut self) {
+        let stack_lookup = self.pop();
+        let stack_lookup = self.stackobj_as_var(&stack_lookup);
+        let var: &Variable = self.deref_localarrayref(stack_lookup);
+        let var = StackObject::FreeVar(var.clone());
+        self.stack.push(var);
+    }
+
+    fn array_lookup_nopop(&mut self) {
+        let stack_lookup: &StackObject = &self.stack[self.stack.len()-1];
+        let stack_lookup: &Variable = self.stackobj_as_var(stack_lookup);
+        let var: &Variable = self.deref_localarrayref(stack_lookup);
+        let var = StackObject::FreeVar(var.clone());
         self.stack.push(var);
     }
 
     fn binop_add(&mut self) {
         let rhs = self.pop();
         let lhs = self.pop();
-        let lhs: &Variable = self.stackvar_asref(&lhs);
-        let rhs: &Variable = self.stackvar_asref(&rhs);
+        let lhs: &Variable = self.stackobj_as_var(&lhs);
+        let rhs: &Variable = self.stackobj_as_var(&rhs);
 
         let result = match (lhs, rhs) {
             (Variable::Frac(left), Variable::Frac(right)) => Variable::Frac(left + right),
@@ -258,8 +271,8 @@ impl<'a> Interpreter<'a> {
     fn binop_sub(&mut self) {
         let rhs = self.pop();
         let lhs = self.pop();
-        let lhs: &Variable = self.stackvar_asref(&lhs);
-        let rhs: &Variable = self.stackvar_asref(&rhs);
+        let lhs: &Variable = self.stackobj_as_var(&lhs);
+        let rhs: &Variable = self.stackobj_as_var(&rhs);
 
         let result = match (lhs, rhs) {
             (Variable::Frac(left), Variable::Frac(right)) => Variable::Frac(left - right),
@@ -273,8 +286,8 @@ impl<'a> Interpreter<'a> {
     fn binop_mul(&mut self) {
         let rhs = self.pop();
         let lhs = self.pop();
-        let lhs: &Variable = self.stackvar_asref(&lhs);
-        let rhs: &Variable = self.stackvar_asref(&rhs);
+        let lhs: &Variable = self.stackobj_as_var(&lhs);
+        let rhs: &Variable = self.stackobj_as_var(&rhs);
 
         let result = match (lhs, rhs) {
             (Variable::Frac(left), Variable::Frac(right)) => Variable::Frac(left * right),
@@ -288,8 +301,8 @@ impl<'a> Interpreter<'a> {
     fn binop_div(&mut self) {
         let rhs = self.pop();
         let lhs = self.pop();
-        let lhs: &Variable = self.stackvar_asref(&lhs);
-        let rhs: &Variable = self.stackvar_asref(&rhs);
+        let lhs: &Variable = self.stackobj_as_var(&lhs);
+        let rhs: &Variable = self.stackobj_as_var(&rhs);
 
         let result = match (lhs, rhs) {
             (Variable::Frac(left), Variable::Frac(right)) => Variable::Frac(left / right),
@@ -304,13 +317,31 @@ impl<'a> Interpreter<'a> {
         self.stack.pop().expect("Popped off empty stack")
     }
 
-    fn stackvar_asref(&'a self, var: &'a StackObject) -> &'a Variable {
+    fn stackobj_as_var(&'a self, var: &'a StackObject) -> &'a Variable {
         match &var {
             StackObject::RefVar(var_ref) => *var_ref,
             StackObject::LocalVar(idx) => self.locals[*idx].as_ref().unwrap(),
             StackObject::FreeVar(var) => &var,
             _ => panic!()
         }
+    }
+
+    fn deref_localarrayref(&'a self, localarrayref: &Variable) -> &'a Variable {
+        let (register, indices) = match localarrayref {
+            Variable::LocalArrayRef(register, indices) => (*register, indices),
+            _ => panic!("Expected LocalArrayRef")
+        };
+        
+        let mut var_ref: &Variable = self.locals[register].as_ref().unwrap();
+        for index in indices.iter() {
+            var_ref = match var_ref {
+                Variable::Array(vector) => &vector[*index],
+                /*Variable::LocalArrayRef(register, indices) => ,
+                Variable::Frac(_) => panic!("Trying to index into a number")*/
+                _ => panic!("Indexing into a non-array?")
+            };
+        };
+        var_ref
     }
 
     fn debug_print(&self) {

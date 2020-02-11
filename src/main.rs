@@ -49,23 +49,23 @@ fn main() {
         vec![
             Instruction::IJumpIfBackwards {delta: 2},
             Instruction::LoadConst {idx: 1},
-            Instruction::StoreLocal {idx: 0}
+            Instruction::StoreLocal {idx: 1}
         ],
         vec![
             Instruction::IJumpIfBackwards {delta: 3},
             Instruction::LoadConst {idx: 2},
-            Instruction::StoreLocal {idx: 2},
+            Instruction::StoreLocal {idx: 0},
             Instruction::IJump {delta: 1},
-            Instruction::FreeLocal {idx: 2}
+            Instruction::FreeLocal {idx: 0}
         ],
         vec![
-            Instruction::IJumpIfBackwards {delta: 3},
-            Instruction::LoadConst {idx: 2},
+            Instruction::IJumpIfBackwards {delta: 6},
+            Instruction::LoadLocal {idx: 0},
             Instruction::LoadConst {idx: 3},
             Instruction::LoadConst {idx: 3},
-            Instruction::CreateIndex {size: 2},
-            Instruction::ReadArray,
-            Instruction::StoreLocal {idx: 1},
+            Instruction::CreateArrayRef {size: 2},
+            Instruction::ArrayLookupNoPop,
+            Instruction::StoreLocal {idx: 2},
         ],
         vec![Instruction::DebugPrint],
         //vec![Instruction::Reverse]
