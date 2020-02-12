@@ -24,7 +24,7 @@ impl fmt::Debug for Variable {
             Variable::LocalArrayRef(register, indices) => {
                 write!(f, "LocalArrayRef({}, {:?})", register, indices)
             },
-            Variable::Array(_) => write!(f, "Array(...)")
+            Variable::Array(vec) => write!(f, "Array({:?})", vec)
         }
     }
 }
@@ -46,8 +46,9 @@ pub enum Instruction {
     IJumpIfBackwards{delta: isize},
     SJumpIfBackwards{delta: isize},
     CreateArrayRef{size: usize},
-    ArrayLookup,
-    ArrayLookupNoPop,
+    ArrayRead,
+    ArrayReadNoPop,
+    ArrayWrite,
     Quit,
     DebugPrint,
 }
@@ -153,8 +154,9 @@ impl<'a> Interpreter<'a> {
                     Instruction::IJump{delta} => self.i_jump(*delta),
                     Instruction::IJumpIfBackwards{delta} => if !self.forwards { self.i_jump(*delta) },
                     Instruction::CreateArrayRef{size} => self.create_array_lookup(*size),
-                    Instruction::ArrayLookup => self.array_lookup(),
-                    Instruction::ArrayLookupNoPop => self.array_lookup_nopop(),
+                    Instruction::ArrayRead => self.array_read(),
+                    Instruction::ArrayReadNoPop => self.array_read_nopop(),
+                    Instruction::ArrayWrite => self.array_write(),
 
                     Instruction::Quit => break 'statement_loop
                 }
@@ -237,7 +239,7 @@ impl<'a> Interpreter<'a> {
         );
     }
 
-    fn array_lookup(&mut self) {
+    fn array_read(&mut self) {
         let stack_lookup = self.pop();
         let stack_lookup = self.stackobj_as_var(&stack_lookup);
         let var: &Variable = self.deref_localarrayref(stack_lookup);
@@ -245,12 +247,40 @@ impl<'a> Interpreter<'a> {
         self.stack.push(var);
     }
 
-    fn array_lookup_nopop(&mut self) {
+    fn array_read_nopop(&mut self) {
         let stack_lookup: &StackObject = &self.stack[self.stack.len()-1];
         let stack_lookup: &Variable = self.stackobj_as_var(stack_lookup);
         let var: &Variable = self.deref_localarrayref(stack_lookup);
         let var = StackObject::FreeVar(var.clone());
         self.stack.push(var);
+    }
+
+    fn array_write(&mut self) {
+        let value = self.pop();
+        let value = self.stackobj_as_var(&value);
+        let value = value.clone();
+
+        let stack_lookup = self.pop();
+        let var_lookup = match stack_lookup {
+            StackObject::FreeVar(var) => var,
+            _ => unreachable!()
+        };
+        let (register, indices) = match var_lookup {
+            Variable::LocalArrayRef(reg, ind) => (reg, ind),
+            _ => unreachable!()
+        };
+        let mut var_ref: &mut Variable = self.locals[register].as_mut().unwrap();
+
+        for i in 0 .. indices.len() - 1 {
+            var_ref = match var_ref {
+                Variable::Array(vec) => &mut vec[indices[i]],
+                _ => panic!("Trying to index into non-array")
+            };
+        }
+        match var_ref {
+            Variable::Array(vec) => vec[indices[indices.len() - 1]] = value,
+            _ => panic!("Trying to index into non-array")
+        };
     }
 
     fn binop_add(&mut self) {
@@ -345,7 +375,7 @@ impl<'a> Interpreter<'a> {
     }
 
     fn debug_print(&self) {
-        println!("Locals: {:?}\nStack: {:?}\n----------", self.locals, self.stack);
+        println!("Locals: {:#?}\nStack: {:#?}\n----------", self.locals, self.stack);
     }
 }
 
