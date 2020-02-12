@@ -5,20 +5,20 @@ use regex;
 
 #[derive(Debug)]
 pub struct Token {
-    type_: String,
-    string_: String,
-    line: usize,
-    col: usize
+    pub type_: String,
+    pub string_: String,
+    pub line: usize,
+    pub col: usize
 }
 
 
 pub fn tokenise(data: &String) -> Vec<Token> {
 
     let name_regex = regex::Regex::new(r"^[a-zA-Z_][a-zA-Z_0-9\.]*").unwrap();
-    let return_regex = regex::Regex::new(r"^\n").unwrap();
-    let ignore_regex = regex::Regex::new(r"^([$][^$]*[$])|([ \t\r\f\v]+)").unwrap();
+    //let return_regex = regex::Regex::new(r"^\n").unwrap();
+    let ignore_regex = regex::Regex::new(r"^([$][^$]*[$])|([ \t\r\n\f\v]+)").unwrap();
     let number_regex = regex::Regex::new(r"^\d+(/\d+)?").unwrap();
-    let mut keywords = HashSet::new();
+    /*let mut keywords = HashSet::new();
     keywords.insert("import");
     keywords.insert("as");
     keywords.insert("global");
@@ -54,46 +54,23 @@ pub fn tokenise(data: &String) -> Vec<Token> {
     keywords.insert("barrier");
     keywords.insert("mutex");
     keywords.insert("xetum");
-    keywords.insert("TID");
+    keywords.insert("TID");*/
 
     let mut ret = Vec::new();
     let mut pos = 0;
     let mut line = 1;
     let mut col = 0;
-    let mut skip_newline = true;
+    //let mut skip_newline = true;
     while pos < data.len() {
-        match return_regex.find(&data[pos..]) {
-            Some(m) => {
-                if !skip_newline {
-                    ret.push(Token{
-                        type_: String::from("NEWLINE"), 
-                        string_: String::from(&data[pos .. pos + m.end()]),
-                        line, col
-                    });
-                }
-                pos += m.end();
-                line += 1;
-                col = 0;
-                skip_newline = true;
-                continue;
-            }
-            None => ()
-        };
         
         match name_regex.find(&data[pos..]) {
             Some(m) => {
                 let string_ = &data[pos .. pos + m.end()];
-                let type_ = if keywords.contains(string_) {
-                    string_
-                } else {
-                    "NAME"
-                };
                 ret.push(Token{
-                    type_: String::from(type_), 
+                    type_: String::from("NAME"), 
                     string_: String::from(string_),
                     line, col
                 });
-                skip_newline = false;
                 pos += m.end();
                 col += m.end();
                 continue;
@@ -110,7 +87,6 @@ pub fn tokenise(data: &String) -> Vec<Token> {
                 });
                 pos += m.end();
                 col += m.end();
-                skip_newline = false;
                 continue;
             }
             None => ()
@@ -132,6 +108,8 @@ pub fn tokenise(data: &String) -> Vec<Token> {
             }
             None => ()
         };
+
+        panic!("Unhandled input characters")
     }
 
     ret

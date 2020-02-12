@@ -8,12 +8,17 @@ mod tokeniser;
 mod interpreter;
 mod ast;
 mod compiler;
+mod parser;
 use interpreter::{Instruction, Statement};
 
 type Fraction = num_rational::BigRational;
 type BigInt = num_bigint::BigInt;
 
 fn main() {
+
+    
+
+    /*
     let main_code: Vec<Statement> = vec![
         vec![
             Instruction::SJumpIfBackwards{delta: 6}
@@ -94,14 +99,13 @@ fn main() {
 
     let mut interpreter = interpreter::Interpreter::new(&functions, 0);
     interpreter.run();
-
-    //println!("{:#?}", interpreter);
-
+    */
     
-    /*let src = fs::read_to_string("examples/tmp.mono")
+    let src = fs::read_to_string("examples/tmp.mono")
         .expect("File io error");
     let tokens = tokeniser::tokenise(&src);
-    println!("{:#?}", tokens);*/
+    println!("{:#?}", tokens);
+    parser::Parser::parse(&tokens);
 
     /*
     let mut compiler = compiler::CompilerCtx::new();

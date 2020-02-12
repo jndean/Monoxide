@@ -14,7 +14,7 @@ type BigInt = num_bigint::BigInt;
 pub enum Variable {
     Frac(Fraction),
     Array(Vec<Variable>),
-    LocalArrayRef(usize, Vec<usize>)
+    LocalArrayRef(usize, Vec<usize>),
 }
 
 impl fmt::Debug for Variable {
@@ -60,7 +60,7 @@ pub type Statement = Vec<Instruction>;
 pub enum StackObject<'s> {
     FreeVar(Variable),
     LocalVar(usize),
-    RefVar(&'s Variable)
+    RefVar(&'s Variable),
 }
 
 
