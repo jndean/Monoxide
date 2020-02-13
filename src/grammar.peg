@@ -1,0 +1,25 @@
+
+
+statement: let_stmt | unlet_stmt ;
+
+
+unlet_stmt: name '=:' expression ';' { ast::UnletStmt::new(t0, t2) };
+
+let_stmt: name ':=' expression ';' { ast::LetStmt::new(t0, t2) };
+
+
+expression: expression binop expression
+          | '(' expression ')'
+          | '-' expression
+          | '!' expression
+          | NUMBER
+          | lookup
+          | array_literal 
+          | array_range
+          ;
+
+lookup: name ('[' expression ']' {t1})* ;
+
+name: '.'? NAME ;
+
+binop: '+' | '-' | '*' | '/' ;

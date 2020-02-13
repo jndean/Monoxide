@@ -3,6 +3,7 @@
 extern crate num_rational;
 
 use std::fs;
+use std::str::FromStr;
 
 mod tokeniser;
 mod interpreter;
@@ -15,8 +16,6 @@ type Fraction = num_rational::BigRational;
 type BigInt = num_bigint::BigInt;
 
 fn main() {
-
-    
 
     /*
     let main_code: Vec<Statement> = vec![
