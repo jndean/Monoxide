@@ -4,14 +4,10 @@ use std::fmt;
 use crate::interpreter;
 
 
-/*trait Expression {
-    fn compile() -> Vec<interpreter::Instruction>;
-}*/
-
-
 #[derive(Debug)]
 pub enum ExpressionNode {
     Fraction(Box<FractionNode>),
+    Lookup(Box<ExpressionNode>),
     Binop(Box<BinopNode>)
 }
 
@@ -21,16 +17,15 @@ pub struct FractionNode {
     pub value: interpreter::Fraction
 }
 
-
 #[derive(Debug)]
-pub enum Binop {
-    Add, Sub, Mul, Div
+pub struct LookupNode {
+    pub name: String,
+    pub indices: Vec<ExpressionNode>
 }
-
 
 #[derive(Debug)]
 pub struct BinopNode {
     pub lhs: ExpressionNode,
     pub rhs: ExpressionNode,
-    pub op: Binop
+    pub op: interpreter::Instruction
 }

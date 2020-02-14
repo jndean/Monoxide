@@ -100,13 +100,15 @@ fn main() {
     interpreter.run();
     */
     
+    /*
     let src = fs::read_to_string("examples/tmp.mono")
         .expect("File io error");
     let tokens = tokeniser::tokenise(&src);
     println!("{:#?}", tokens);
     parser::Parser::parse(&tokens);
+    */
 
-    /*
+    
     let mut compiler = compiler::CompilerCtx::new();
 
     let eleven = ast::FractionNode{value: Fraction::from(BigInt::from(11))};
@@ -114,10 +116,14 @@ fn main() {
     let add = ast::BinopNode {
         lhs: ast::ExpressionNode::Fraction(Box::new(eleven)),
         rhs: ast::ExpressionNode::Fraction(Box::new(twelve)),
-        op: ast::Binop::Add
+        op: Instruction::BinopAdd
     };
-    let code = add.compile(&mut compiler);
+    let lookup = ast::LookupNode {
+        name: String::from("DATA"),
+        indices: vec![]//ast::ExpressionNode::Binop(Box::new(add))]
+    };
+    let code = lookup.compile(&mut compiler);
     println!("ctx: {:#?}", compiler);
-    println!("code: {:#?}", code);*/
+    println!("code: {:#?}", code);
 
 }

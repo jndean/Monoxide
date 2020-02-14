@@ -30,7 +30,7 @@ impl fmt::Debug for Variable {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Instruction {
     LoadConst{idx: usize},
     LoadLocal{idx: usize},

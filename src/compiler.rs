@@ -1,20 +1,43 @@
 
+use std::collections::HashMap;
+
 use crate::ast;
 use crate::interpreter;
 use interpreter::Instruction;
 
 
 #[derive(Debug)]
+struct Variable {
+    pub register: usize
+}
+
+impl Variable {
+    fn new(register: usize) -> Variable {
+        Variable{
+            register
+        }
+    }
+}
+
+
+#[derive(Debug)]
 pub struct CompilerCtx {
     consts: Vec<interpreter::Variable>,
-    locals: Vec<interpreter::Variable>,
-    local_use_names: Vec<Option<String>>
+
+    free_registers: Vec<usize>,
+    local_variables: HashMap<String, Variable>,
+    num_registers: u16
 }
 
 
 impl CompilerCtx {
     pub fn new() -> CompilerCtx {
-        CompilerCtx{consts: Vec::new(), locals: Vec::new(), local_use_names: Vec::new()}
+        CompilerCtx{
+            consts: Vec::new(), 
+            free_registers: Vec::new(),
+            local_variables: HashMap::new(),
+            num_registers: 0
+        }
     }
 
     fn add_const(&mut self, val: interpreter::Variable) -> usize {
@@ -24,6 +47,25 @@ impl CompilerCtx {
         self.consts.push(val);
         self.consts.len() - 1
     }
+
+    fn lookup_name(&mut self, name: &str) -> usize {
+        match self.local_variables.get(name) {
+            Some(var) => var.register,
+            None => {
+                if self.free_registers.is_empty() {
+                    let register = self.num_registers as usize;
+                    self.num_registers += 1;
+                    self.local_variables.insert(
+                        name.to_string(),
+                        Variable::new(register)
+                    );
+                    register
+                } else {
+                    unimplemented!();
+                }
+            }
+        }
+    }
 }
 
 
@@ -31,7 +73,8 @@ impl ast::ExpressionNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
         match &self {
             ast::ExpressionNode::Fraction(valbox) => valbox.compile(ctx),
-            ast::ExpressionNode::Binop(valbox) => valbox.compile(ctx)
+            ast::ExpressionNode::Lookup(valbox) => valbox.compile(ctx),
+            ast::ExpressionNode::Binop(valbox) => valbox.compile(ctx),
         }
     }
 }
@@ -46,19 +89,36 @@ impl ast::FractionNode {
 }
 
 
+impl ast::LookupNode {
+    pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
+        let idx = ctx.lookup_name(&self.name);
+        let mut instructions = vec![Instruction::LoadLocal{idx}];
+        
+        // Handle array lookups //
+        if !self.indices.is_empty() {
+            for index in self.indices.iter() {
+                instructions.extend(index.compile(ctx));
+            }
+            instructions.push(
+                Instruction::CreateArrayRef{
+                    size: self.indices.len()
+                }
+            );
+            instructions.push(
+                Instruction::ArrayRead
+            );
+        }
+        instructions
+    }
+}
+
+
 impl ast::BinopNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
         let mut ret = Vec::new();
         ret.extend(self.lhs.compile(ctx));
         ret.extend(self.rhs.compile(ctx));
-        ret.push(
-            match self.op {
-                ast::Binop::Add => Instruction::BinopAdd,
-                ast::Binop::Sub => Instruction::BinopSub,
-                ast::Binop::Mul => Instruction::BinopMul,
-                ast::Binop::Div => Instruction::BinopDiv,
-            }
-        );
+        ret.push(self.op.clone());
         ret
     }
 }
