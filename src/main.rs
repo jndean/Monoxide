@@ -113,16 +113,16 @@ fn main() {
 
     let eleven = ast::FractionNode{value: Fraction::from(BigInt::from(11))};
     let twelve = ast::FractionNode{value: Fraction::from(BigInt::from(12))};
+    let lookup = ast::LookupNode {
+        name: String::from("DATA"),
+        indices: vec![ast::ExpressionNode::Fraction(Box::new(eleven))]
+    };
     let add = ast::BinopNode {
-        lhs: ast::ExpressionNode::Fraction(Box::new(eleven)),
+        lhs: ast::ExpressionNode::Lookup(Box::new(lookup)),
         rhs: ast::ExpressionNode::Fraction(Box::new(twelve)),
         op: Instruction::BinopAdd
     };
-    let lookup = ast::LookupNode {
-        name: String::from("DATA"),
-        indices: vec![]//ast::ExpressionNode::Binop(Box::new(add))]
-    };
-    let code = lookup.compile(&mut compiler);
+    let code = add.compile(&mut compiler);
     println!("ctx: {:#?}", compiler);
     println!("code: {:#?}", code);
 

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::ast;
 use crate::interpreter;
-use interpreter::Instruction;
+use interpreter::{Instruction, Statement};
 
 
 #[derive(Debug)]
@@ -48,24 +48,41 @@ impl CompilerCtx {
         self.consts.len() - 1
     }
 
-    fn lookup_name(&mut self, name: &str) -> usize {
+    fn lookup_local(&mut self, name: &str) -> usize {
         match self.local_variables.get(name) {
             Some(var) => var.register,
-            None => {
-                if self.free_registers.is_empty() {
-                    let register = self.num_registers as usize;
-                    self.num_registers += 1;
-                    self.local_variables.insert(
-                        name.to_string(),
-                        Variable::new(register)
-                    );
-                    register
-                } else {
-                    unimplemented!();
-                }
-            }
+            None => panic!("Accessing non-existant local")
         }
     }
+
+    fn create_local(&mut self, name: &str) -> usize {
+        if self.local_variables.contains_key(name) {
+            panic!("Initialising a variable that already exists");
+        };
+        let register = match self.free_registers.pop() {
+            Some(r) => r,
+            None => {
+                self.num_registers += 1;
+               (self.num_registers - 1) as usize
+            }
+        };
+        self.local_variables.insert(
+            name.to_string(),
+            Variable::new(register)
+        );
+        register
+    }
+
+    fn free_local(&mut self, name: &str) -> usize {
+        match self.local_variables.remove(name) {
+            Some(var) => {
+                self.free_registers.push(var.register);
+                var.register
+            },
+            None => panic!("Freeing non-existant local")
+        }
+    }
+
 }
 
 
@@ -91,7 +108,7 @@ impl ast::FractionNode {
 
 impl ast::LookupNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
-        let idx = ctx.lookup_name(&self.name);
+        let idx = ctx.lookup_local(&self.name);
         let mut instructions = vec![Instruction::LoadLocal{idx}];
         
         // Handle array lookups //
@@ -120,5 +137,43 @@ impl ast::BinopNode {
         ret.extend(self.rhs.compile(ctx));
         ret.push(self.op.clone());
         ret
+    }
+}
+
+
+pub fn stmt_from_fwd_bkwd(fwd: Vec<Instruction>, bkwd: Vec<Instruction>) -> Statement {
+    let mut stmt = Vec::with_capacity(fwd.len() + bkwd.len() + 2);
+    stmt.push(Instruction::IJumpIfBackwards{delta: (fwd.len() + 1) as isize});
+    stmt.extend(fwd);
+    stmt.push(Instruction::IJump{delta: bkwd.len() as isize});
+    stmt.extend(bkwd);
+    stmt
+}
+
+impl ast::StatementNode {
+    pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Statement> {
+        match &self {
+            ast::StatementNode::LetUnlet(valbox) => valbox.compile(ctx)
+        }
+    }
+}
+
+
+impl ast::LetUnletNode {
+    pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Statement> {
+        let mut fwd_stmt = Vec::new();
+        fwd_stmt.extend(self.rhs.compile(ctx));
+        let register = ctx.create_local(&self.name);
+        fwd_stmt.push(Instruction::StoreLocal{idx:register});
+
+        let register = ctx.free_local(&self.name);
+        let bkwd_stmt = vec![Instruction::FreeLocal{idx: register}];
+
+        if self.is_unlet {
+            vec![stmt_from_fwd_bkwd(fwd_stmt, bkwd_stmt)]
+        } else {
+            vec![stmt_from_fwd_bkwd(bkwd_stmt, fwd_stmt)]
+        }
+
     }
 }
