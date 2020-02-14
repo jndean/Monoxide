@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use crate::tokeniser::Token;
 use crate::ast;
-use crate::interpreter::Fraction;
+use crate::interpreter::{Fraction, Instruction};
 
 
 pub struct Parser<'a> {
@@ -50,7 +50,6 @@ impl<'a> Parser<'a> {
     }
 
     
-
     pub fn parse(tokens: &Vec<Token>) {
         let mut parser = Parser{tokens, token_pos: 0};
         match parser.expression() { 
@@ -74,15 +73,31 @@ impl<'a> Parser<'a> {
         }, None => ()};
 
 
-        match self.expression()        { Some(lhs) => {
-        match self.expect_literal("+") { Some(op) => {
-        match self.expression()        { Some(rhs) => {
-            let value = ast::BinopNode{lhs, rhs, op: ast::Binop::Add};
-            return Some(ast::ExpressionNode::Binop(Box::new(value)));
+        //match self.expect(Parser::expression) { Some(lhs) => {
+        match self.expression() { Some(lhs) => {
+        match self.binop()      { Some(op)  => {
+        match self.expression() { Some(rhs) => {
+            return Some(
+                ast::ExpressionNode::Binop(Box::new(
+                    ast::BinopNode{lhs, rhs, op}
+                )));
         }, None => ()}}, None => ()}}, None => ()};
 
         self.reset(pos);
-
         None
+    }
+
+    fn binop(&mut self) -> Option<Instruction> {
+        if self.expect_literal("+").is_some() { return Some(Instruction::BinopAdd) };
+        if self.expect_literal("-").is_some() { return Some(Instruction::BinopSub) };
+        if self.expect_literal("*").is_some() { return Some(Instruction::BinopMul) };
+        if self.expect_literal("/").is_some() { return Some(Instruction::BinopDiv) };
+        None
+    }
+
+    fn expect<F, R>(&'a mut self, method: F) -> Option<R>
+        where F: Fn(&'a mut Parser) -> Option<R> 
+    {
+        method(self)
     }
 }
