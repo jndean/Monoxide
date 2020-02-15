@@ -111,19 +111,47 @@ fn main() {
     
     let mut compiler = compiler::CompilerCtx::new();
 
+    let one = ast::FractionNode{value: Fraction::from(BigInt::from(1))};
     let eleven = ast::FractionNode{value: Fraction::from(BigInt::from(11))};
     let twelve = ast::FractionNode{value: Fraction::from(BigInt::from(12))};
-    let lookup = ast::LookupNode {
-        name: String::from("DATA"),
-        indices: vec![ast::ExpressionNode::Fraction(Box::new(eleven))]
-    };
-    let add = ast::BinopNode {
-        lhs: ast::ExpressionNode::Lookup(Box::new(lookup)),
+    let lookup = ast::ExpressionNode::Lookup(Box::new(ast::LookupNode {
+        name: String::from("XXX"),
+        indices: vec![ast::ExpressionNode::Fraction(Box::new(one))]
+    }));
+    let add = ast::ExpressionNode::Binop(Box::new(ast::BinopNode {
+        lhs: ast::ExpressionNode::Fraction(Box::new(eleven)),
         rhs: ast::ExpressionNode::Fraction(Box::new(twelve)),
         op: Instruction::BinopAdd
+    }));
+    let let_ = ast::LetUnletNode {
+        is_unlet: false,
+        name: String::from("XXX"),
+        rhs: add
     };
-    let code = add.compile(&mut compiler);
-    println!("ctx: {:#?}", compiler);
-    println!("code: {:#?}", code);
+    let unlet_ = ast::LetUnletNode {
+        is_unlet: true,
+        name: String::from("XXX"),
+        rhs: lookup
+    };
+    let code = let_.compile(&mut compiler);
+    //println!("code: {:#?}", code);
+    //let code = unlet_.compile(&mut compiler);
+    //println!("code: {:#?}", code);
+    //println!("ctx: {:#?}", compiler);
 
+
+    let result = call(adder, 4, 5);
+    println!("Called: {}", result);
+}
+
+
+fn call<F, R>(func: F, x: R, y: R) -> R 
+    where F: Fn(R, R) -> R , 
+          R: Copy
+{
+    func(func(x, y), x)
+}
+
+fn adder(x: i32, y: i32) -> i32 {
+    x+y
 }

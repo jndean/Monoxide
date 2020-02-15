@@ -161,19 +161,22 @@ impl ast::StatementNode {
 
 impl ast::LetUnletNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Statement> {
+        let register = if self.is_unlet {
+            ctx.free_local(&self.name)
+        } else {
+            ctx.create_local(&self.name)
+        };
+
         let mut fwd_stmt = Vec::new();
         fwd_stmt.extend(self.rhs.compile(ctx));
-        let register = ctx.create_local(&self.name);
         fwd_stmt.push(Instruction::StoreLocal{idx:register});
 
-        let register = ctx.free_local(&self.name);
         let bkwd_stmt = vec![Instruction::FreeLocal{idx: register}];
 
         if self.is_unlet {
-            vec![stmt_from_fwd_bkwd(fwd_stmt, bkwd_stmt)]
-        } else {
             vec![stmt_from_fwd_bkwd(bkwd_stmt, fwd_stmt)]
+        } else {
+            vec![stmt_from_fwd_bkwd(fwd_stmt, bkwd_stmt)]
         }
-
     }
 }
