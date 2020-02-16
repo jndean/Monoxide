@@ -49,6 +49,7 @@ pub enum Instruction {
     ArrayRead,
     ArrayReadNoPop,
     ArrayWrite,
+    ArrayPull{register: usize},
     Quit,
     DebugPrint,
 }
@@ -157,6 +158,7 @@ impl<'a> Interpreter<'a> {
                     Instruction::ArrayRead => self.array_read(),
                     Instruction::ArrayReadNoPop => self.array_read_nopop(),
                     Instruction::ArrayWrite => self.array_write(),
+                    Instruction::ArrayPull{register} => self.array_pull(*register),
 
                     Instruction::Quit => break 'statement_loop
                 }
@@ -366,12 +368,53 @@ impl<'a> Interpreter<'a> {
         for index in indices.iter() {
             var_ref = match var_ref {
                 Variable::Array(vector) => &vector[*index],
-                /*Variable::LocalArrayRef(register, indices) => ,
-                Variable::Frac(_) => panic!("Trying to index into a number")*/
                 _ => panic!("Indexing into a non-array?")
             };
         };
         var_ref
+    }
+
+    /*
+    fn stackobj_as_mutvar<'b>(&'b mut self, var: &'b mut StackObject) -> &'b mut Variable {
+        let mut ret: &mut Variable = match var {
+            StackObject::LocalVar(idx) => self.locals[*idx].as_mut().unwrap(),
+            StackObject::FreeVar(varref) => varref,
+            StackObject::RefVar(_) => panic!("Trying to mutate const variable")
+        };
+        if let Variable::LocalArrayRef(register, indices) = ret {
+            let register = *register;
+            let indices = indices.clone();
+            ret = self.locals.get_mut(register).unwrap().as_mut().unwrap();
+            for index in indices.iter() {
+                ret = match ret {
+                    Variable::Array(vector) => vector.get_mut(*index).unwrap(),
+                    _ => panic!("Indexing into a non-array?")
+                };
+            };
+            
+            ret
+        } else {
+            ret
+        }
+    }
+    */
+
+    fn array_pull(&mut self, register: usize) {
+        let mut stackvar = self.pop();
+        let mut varref = if let StackObject::LocalVar(idx) = stackvar {
+            self.locals[idx].as_mut().unwrap()
+        } else {
+            panic!("Incorrect variable type for PULL")
+        };
+        if let Variable::LocalArrayRef(register, indices) = varref {
+            varref = self.locals.get_mut(*register).unwrap().as_mut().unwrap();
+        };
+
+        if let Variable::Array(items) = varref {
+            let newvar = items.pop();
+        } else {
+            panic!("Trying to pull from a non-array")
+        }
     }
 
     fn debug_print(&self) {
