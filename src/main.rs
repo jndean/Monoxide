@@ -134,24 +134,9 @@ fn main() {
         rhs: lookup
     };
     let code = let_.compile(&mut compiler);
-    //println!("code: {:#?}", code);
+    println!("code: {:#?}", code);
     //let code = unlet_.compile(&mut compiler);
     //println!("code: {:#?}", code);
-    //println!("ctx: {:#?}", compiler);
+    println!("ctx: {:#?}", compiler);
 
-
-    let result = call(adder, 4, 5);
-    println!("Called: {}", result);
-}
-
-
-fn call<F, R>(func: F, x: R, y: R) -> R 
-    where F: Fn(R, R) -> R , 
-          R: Copy
-{
-    func(func(x, y), x)
-}
-
-fn adder(x: i32, y: i32) -> i32 {
-    x+y
 }

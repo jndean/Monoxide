@@ -109,21 +109,15 @@ impl ast::FractionNode {
 impl ast::LookupNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
         let idx = ctx.lookup_local(&self.name);
-        let mut instructions = vec![Instruction::LoadLocal{idx}];
+        let mut instructions = vec![Instruction::LoadRegister{idx}];
         
         // Handle array lookups //
         if !self.indices.is_empty() {
             for index in self.indices.iter() {
                 instructions.extend(index.compile(ctx));
             }
-            instructions.push(
-                Instruction::CreateArrayRef{
-                    size: self.indices.len()
-                }
-            );
-            instructions.push(
-                Instruction::ArrayRead
-            );
+            instructions.push(Instruction::CreateIndex{size: self.indices.len()});
+            instructions.push(Instruction::Load);
         }
         instructions
     }
@@ -169,9 +163,9 @@ impl ast::LetUnletNode {
 
         let mut fwd_stmt = Vec::new();
         fwd_stmt.extend(self.rhs.compile(ctx));
-        fwd_stmt.push(Instruction::StoreLocal{idx:register});
+        fwd_stmt.push(Instruction::StoreRegister{idx:register});
 
-        let bkwd_stmt = vec![Instruction::FreeLocal{idx: register}];
+        let bkwd_stmt = vec![Instruction::FreeRegister{idx: register}];
 
         if self.is_unlet {
             vec![stmt_from_fwd_bkwd(bkwd_stmt, fwd_stmt)]
