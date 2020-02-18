@@ -6,12 +6,12 @@ use crate::ast;
 use crate::interpreter::{Fraction, Instruction};
 
 
-pub struct Parser<'a> {
-    tokens: &'a Vec<Token>,
+pub struct Parser {
+    tokens: Vec<Token>,
     token_pos: usize,
 }
 
-impl<'a> Parser<'a> {
+impl Parser {
 
     fn mark(&self) -> usize {
         self.token_pos
@@ -21,36 +21,27 @@ impl<'a> Parser<'a> {
         self.token_pos = pos;
     }
 
-    fn expect_literal(&mut self, value: &str) -> Option<&Token> {
-        match self.tokens.get(self.token_pos).as_ref() {
-            Some(tokenref) => {
-                if tokenref.string_ == value {
-                    self.token_pos += 1;
-                    Some(tokenref)
-                } else {
-                    None
-                }
+    fn expect_literal(&mut self, value: &str) -> Option<Token> {
+        if let Some(tokenref) =  self.tokens.get(self.token_pos).as_ref() {
+            if tokenref.string_ == value {
+                self.token_pos += 1;
+                return Some((*tokenref).clone());
             }
-            None => None
         }
+        None
     }
 
-    fn expect_type(&mut self, type_: &str) -> Option<&Token> {
-        match self.tokens.get(self.token_pos).as_ref() {
-            Some(tokenref) => {
-                if tokenref.type_ == type_ {
-                    self.token_pos += 1;
-                    Some(tokenref)
-                } else {
-                    None
-                }
+    fn expect_type(&mut self, type_: &str) -> Option<Token> {
+        if let Some(tokenref) =  self.tokens.get(self.token_pos).as_ref() {
+            if tokenref.type_ == type_ {
+                self.token_pos += 1;
+                return Some((*tokenref).clone());
             }
-            None => None
         }
+        None
     }
 
-    
-    pub fn parse(tokens: &Vec<Token>) {
+    pub fn parse(tokens: Vec<Token>) {
         let mut parser = Parser{tokens, token_pos: 0};
         match parser.expression() { 
             Some(x) => {
@@ -65,23 +56,21 @@ impl<'a> Parser<'a> {
     pub fn expression(&mut self) -> Option<ast::ExpressionNode> {
         let pos = self.mark();
 
-        let frac = self.expect_type("NUMBER");
-        match frac { Some(token) => {
+        if let Some(token) = self.expect_type("NUMBER") {
             let value = Fraction::from_str(&token.string_[..]).unwrap();
             let value = ast::FractionNode{value};
             return Some(ast::ExpressionNode::Fraction(Box::new(value)));
-        }, None => ()};
+        };
 
 
-        //match self.expect(Parser::expression) { Some(lhs) => {
-        match self.expression() { Some(lhs) => {
-        match self.binop()      { Some(op)  => {
-        match self.expression() { Some(rhs) => {
+        if let Some(lhs) = self.expect(Parser::expression) {
+        if let Some(op)  = self.expect(Parser::binop) {
+        if let Some(rhs) = self.expect(Parser::expression) {
             return Some(
                 ast::ExpressionNode::Binop(Box::new(
                     ast::BinopNode{lhs, rhs, op}
-                )));
-        }, None => ()}}, None => ()}}, None => ()};
+            )));
+        }}};
 
         self.reset(pos);
         None
@@ -95,8 +84,23 @@ impl<'a> Parser<'a> {
         None
     }
 
-    fn expect<F, R>(&'a mut self, method: F) -> Option<R>
-        where F: Fn(&'a mut Parser) -> Option<R> 
+    fn name(&mut self) -> Option<String> {
+        let pos = self.mark();
+
+        let dot = self.expect_literal(".");
+        if let Some(token) = self.expect_type("NAME") {
+            return Some(
+                if dot.is_some() { String::from(".") + &token.string_ }
+                else             { token.string_ }
+            );
+        };
+
+        self.reset(pos);
+        None
+    }
+
+    fn expect<F, R>(&mut self, method: F) -> Option<R>
+        where F: Fn(&mut Parser) -> Option<R> 
     {
         method(self)
     }
