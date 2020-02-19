@@ -15,9 +15,17 @@ pub struct Token {
 pub fn tokenise(data: &String) -> Vec<Token> {
 
     let name_regex = regex::Regex::new(r"^[a-zA-Z_][a-zA-Z_0-9\.]*").unwrap();
-    //let return_regex = regex::Regex::new(r"^\n").unwrap();
-    let ignore_regex = regex::Regex::new(r"^([$][^$]*[$])|([ \t\r\n\f\v]+)").unwrap();
     let number_regex = regex::Regex::new(r"^\d+(/\d+)?").unwrap();
+    let ignore_regex = regex::Regex::new(r"^(([$][^$]*[$])|([ \t\r\n\f\v]+))").unwrap();
+    let symbol_regex = regex::Regex::new(&(String::from(r"^(")
+    + r"\+=|\-=|\*=|/="
+    + r"|<=|>=|!=|=="
+    + r"|:=|=:|=>"
+    + r"|\+|\-|\*|/"
+    + r"|=|<|>"
+    + r"|\[|\]|\(|\)|\{|\}"
+    + r")")).unwrap();
+  
     /*let mut keywords = HashSet::new();
     keywords.insert("import");
     keywords.insert("as");
@@ -63,19 +71,28 @@ pub fn tokenise(data: &String) -> Vec<Token> {
     //let mut skip_newline = true;
     while pos < data.len() {
         
-        match name_regex.find(&data[pos..]) {
-            Some(m) => {
-                let string_ = &data[pos .. pos + m.end()];
-                ret.push(Token{
-                    type_: String::from("NAME"), 
-                    string_: String::from(string_),
-                    line, col
-                });
-                pos += m.end();
-                col += m.end();
-                continue;
-            }
-            None => ()
+        if let Some(m) = name_regex.find(&data[pos..]) {
+            let string_ = &data[pos .. pos + m.end()];
+            ret.push(Token{
+                type_: String::from("NAME"), 
+                string_: String::from(string_),
+                line, col
+            });
+            pos += m.end();
+            col += m.end();
+            continue;
+        };
+
+        if let Some(m) = symbol_regex.find(&data[pos..]) {
+            let string_ = &data[pos .. pos + m.end()];
+            ret.push(Token{
+                type_: String::from("SYMBOL"), 
+                string_: String::from(string_),
+                line, col
+            });
+            pos += m.end();
+            col += m.end();
+            continue;
         };
         
         match number_regex.find(&data[pos..]) {
@@ -109,6 +126,7 @@ pub fn tokenise(data: &String) -> Vec<Token> {
             None => ()
         };
 
+        println!("pos {}", pos);
         panic!("Unhandled input characters")
     }
 

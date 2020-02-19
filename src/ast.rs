@@ -12,9 +12,14 @@ pub enum ExpressionNode {
 }
 
 
-#[derive(Debug)]
 pub struct FractionNode {
     pub value: interpreter::Fraction
+}
+
+impl fmt::Debug for FractionNode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
 }
 
 #[derive(Debug)]

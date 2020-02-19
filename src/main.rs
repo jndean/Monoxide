@@ -100,15 +100,15 @@ fn main() {
     interpreter.run();
     */
     
-    /*
+    
     let src = fs::read_to_string("examples/tmp.mono")
         .expect("File io error");
     let tokens = tokeniser::tokenise(&src);
     println!("{:#?}", tokens);
-    parser::Parser::parse(&tokens);
-    */
-
+    parser::Parser::parse(tokens);
     
+
+    /*
     let mut compiler = compiler::CompilerCtx::new();
 
     let one = ast::FractionNode{value: Fraction::from(BigInt::from(1))};
@@ -138,5 +138,5 @@ fn main() {
     //let code = unlet_.compile(&mut compiler);
     //println!("code: {:#?}", code);
     println!("ctx: {:#?}", compiler);
-
+    */
 }

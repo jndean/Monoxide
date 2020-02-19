@@ -41,9 +41,34 @@ impl Parser {
         None
     }
 
+    fn expect<F, R>(&mut self, method: F) -> Option<R>
+        where F: Fn(&mut Parser) -> Option<R> 
+    {
+        method(self)
+    }
+
+    fn repeat<F, R>(&mut self, method: F, allow_empty: bool) -> Option<Vec<R>>
+        where F: Copy + Fn(&mut Parser) -> Option<R>
+    {
+        let pos = self.mark();
+        let mut results = Vec::new();
+        loop {
+            match self.expect(method) {
+                Some(result) => results.push(result),
+                None => break
+            };
+        };
+        if results.is_empty() && !allow_empty {
+            self.reset(pos);
+            None
+        } else {
+            Some(results)
+        }
+    }
+
     pub fn parse(tokens: Vec<Token>) {
         let mut parser = Parser{tokens, token_pos: 0};
-        match parser.expression() { 
+        match parser.lookup() { 
             Some(x) => {
                 println!("Parsed: {:#?}", x);
             }, 
@@ -76,7 +101,7 @@ impl Parser {
         None
     }
 
-    fn binop(&mut self) -> Option<Instruction> {
+    pub fn binop(&mut self) -> Option<Instruction> {
         if self.expect_literal("+").is_some() { return Some(Instruction::BinopAdd) };
         if self.expect_literal("-").is_some() { return Some(Instruction::BinopSub) };
         if self.expect_literal("*").is_some() { return Some(Instruction::BinopMul) };
@@ -84,7 +109,32 @@ impl Parser {
         None
     }
 
-    fn name(&mut self) -> Option<String> {
+    pub fn lookup(&mut self) -> Option<ast::LookupNode> {
+        let pos = self.mark();
+
+        if let Some(name)    = self.expect(Parser::name) {
+        if let Some(indices) = self.repeat(Parser::index, true) {
+            return Some(ast::LookupNode{name, indices});
+        }};
+
+        self.reset(pos);
+        None
+    }
+
+    pub fn index(&mut self) -> Option<ast::ExpressionNode> {
+        let pos = self.mark();
+
+        if self.expect_literal("[").is_some() {
+        if let Some(expr) = self.expect(Parser::expression) {
+        if self.expect_literal("]").is_some() {
+            return Some(expr);
+        }}};
+
+        self.reset(pos);
+        None
+    }
+
+    pub fn name(&mut self) -> Option<String> {
         let pos = self.mark();
 
         let dot = self.expect_literal(".");
@@ -99,9 +149,4 @@ impl Parser {
         None
     }
 
-    fn expect<F, R>(&mut self, method: F) -> Option<R>
-        where F: Fn(&mut Parser) -> Option<R> 
-    {
-        method(self)
-    }
 }
