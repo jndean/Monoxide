@@ -68,7 +68,7 @@ impl Parser {
 
     pub fn parse(tokens: Vec<Token>) {
         let mut parser = Parser{tokens, token_pos: 0};
-        match parser.lookup() { 
+        match parser.statements() { 
             Some(x) => {
                 println!("Parsed: {:#?}", x);
             }, 
@@ -76,6 +76,42 @@ impl Parser {
                 println!("Failed to parse tokens");
             }
         };
+    }
+
+
+    pub fn statements(&mut self) -> Option<Vec<ast::StatementNode>> {
+        self.repeat(Parser::statement, true)
+    }
+
+    pub fn statement(&mut self) -> Option<ast::StatementNode> {
+        if let Some(stmt) = self.expect(Parser::let_unlet) {
+            if self.expect_literal(";").is_some() {
+                return Some(stmt);}}
+        None
+    }
+
+    pub fn let_unlet(&mut self) -> Option<ast::StatementNode> {
+        let pos = self.mark();
+
+        if let Some(name) = self.expect(Parser::name) {
+        if self.expect_literal(":=").is_some() {
+        if let Some(rhs) = self.expect(Parser::expression) {
+            return Some(ast::StatementNode::LetUnlet(Box::new(
+                ast::LetUnletNode{name, rhs, is_unlet: false}
+            )));
+        }}};
+        self.reset(pos);
+
+        if let Some(name) = self.expect(Parser::name) {
+        if self.expect_literal("=:").is_some() {
+        if let Some(rhs) = self.expect(Parser::expression) {
+            return Some(ast::StatementNode::LetUnlet(Box::new(
+                ast::LetUnletNode{name, rhs, is_unlet: true}
+            )));
+        }}};
+
+        self.reset(pos);
+        None
     }
 
     pub fn expression(&mut self) -> Option<ast::ExpressionNode> {
