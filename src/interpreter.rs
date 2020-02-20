@@ -94,6 +94,22 @@ pub struct Function {
     pub num_registers: usize
 }
 
+macro_rules! binop_method {
+    ($name:ident, $op:tt) => {
+        fn $name (&mut self) {
+            let rhs = self.pop();
+            let lhs = self.pop();
+            let lhs: &Variable = self.stackobj_as_varref(&lhs);
+            let rhs: &Variable = self.stackobj_as_varref(&rhs);
+            let result = match (lhs, rhs) {
+                (Variable::Frac(left), Variable::Frac(right)) => Variable::Frac(left $op right),
+                (Variable::Array(_), Variable::Array(_)) => unimplemented!(),
+                _ => panic!("Adding incompatible types")
+            };
+            self.stack.push(StackObject::FreeVar(result));
+        }
+    };
+}
 
 impl<'a> Interpreter<'a> {
 
@@ -247,66 +263,11 @@ impl<'a> Interpreter<'a> {
         *self.stackobj_as_mut_varef(&mut destination) = value;
     }
 
-    fn binop_add(&mut self) {
-        let rhs = self.pop();
-        let lhs = self.pop();
-        let lhs: &Variable = self.stackobj_as_varref(&lhs);
-        let rhs: &Variable = self.stackobj_as_varref(&rhs);
-
-        let result = match (lhs, rhs) {
-            (Variable::Frac(left), Variable::Frac(right)) => Variable::Frac(left + right),
-            (Variable::Array(_), Variable::Array(_)) => unimplemented!(),
-            _ => panic!("Adding incompatible types")
-        };
-
-        self.stack.push(StackObject::FreeVar(result));
-    }
+    binop_method!(binop_add, +);
+    binop_method!(binop_sub, -);
+    binop_method!(binop_mul, *);
+    binop_method!(binop_div, /);
     
-    fn binop_sub(&mut self) {
-        let rhs = self.pop();
-        let lhs = self.pop();
-        let lhs: &Variable = self.stackobj_as_varref(&lhs);
-        let rhs: &Variable = self.stackobj_as_varref(&rhs);
-
-        let result = match (lhs, rhs) {
-            (Variable::Frac(left), Variable::Frac(right)) => Variable::Frac(left - right),
-            (Variable::Array(_), Variable::Array(_)) => unimplemented!(),
-            _ => panic!("Subtracting incompatible types")
-        };
-
-        self.stack.push(StackObject::FreeVar(result));
-    }
-
-    fn binop_mul(&mut self) {
-        let rhs = self.pop();
-        let lhs = self.pop();
-        let lhs: &Variable = self.stackobj_as_varref(&lhs);
-        let rhs: &Variable = self.stackobj_as_varref(&rhs);
-
-        let result = match (lhs, rhs) {
-            (Variable::Frac(left), Variable::Frac(right)) => Variable::Frac(left * right),
-            (Variable::Array(_), Variable::Array(_)) => unimplemented!(),
-            _ => panic!("Multiplying incompatible types")
-        };
-
-        self.stack.push(StackObject::FreeVar(result));
-    }
-
-    fn binop_div(&mut self) {
-        let rhs = self.pop();
-        let lhs = self.pop();
-        let lhs: &Variable = self.stackobj_as_varref(&lhs);
-        let rhs: &Variable = self.stackobj_as_varref(&rhs);
-
-        let result = match (lhs, rhs) {
-            (Variable::Frac(left), Variable::Frac(right)) => Variable::Frac(left / right),
-            (Variable::Array(_), Variable::Array(_)) => unimplemented!(),
-            _ => panic!("Dividing incompatible types")
-        };
-
-        self.stack.push(StackObject::FreeVar(result));
-    }
-
     fn pop(&mut self) -> StackObject {
         self.stack.pop().expect("Popped off empty stack")
     }
