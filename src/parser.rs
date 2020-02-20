@@ -1,14 +1,62 @@
 
+use std::collections::HashMap;
 use std::str::FromStr;
 
 use crate::tokeniser::Token;
-use crate::ast;
+use crate::ast::{
+    StatementNode, ExpressionNode, LookupNode, LetUnletNode,
+    FractionNode, BinopNode
+};
 use crate::interpreter::{Fraction, Instruction};
 
 
 pub struct Parser {
     tokens: Vec<Token>,
     token_pos: usize,
+    memo: HashMap<(usize, String), (usize, Parsed)>
+}
+
+type VecStatementNode = Vec<StatementNode>;
+#[derive(Clone)]
+pub enum Parsed {
+    Token(Option<Token>),
+    VecStatementNode(Option<VecStatementNode>),
+    StatementNode(Option<StatementNode>),
+    ExpressionNode(Option<ExpressionNode>),
+    Instruction(Option<Instruction>),
+    LookupNode(Option<LookupNode>),
+    String(Option<String>)
+}
+
+
+#[allow(unused_macros)]
+macro_rules! memoise {
+    ($raw_func:ident as $out_func:ident -> $ret_type:ident) => {
+        fn $out_func(&mut self) -> Option<$ret_type> {
+            let pos = self.mark();
+            let key = (pos, String::from(stringify!($raw_func)));
+            match self.memo.get(&key) {
+                Some((end, result)) => {
+                    let end = *end;
+                    let result = (*result).clone();
+                    if let Parsed::$ret_type(ret) = result {
+                        println!("Retrieving memoised {} at pos {}", 
+                            stringify!($ret_type), pos);
+                        self.reset(end);
+                        return ret;
+                    } else {unreachable!()}
+                },
+                None => {
+                    let result = self.$raw_func();
+                    self.memo.insert(
+                        key, 
+                        (self.mark(), Parsed::$ret_type(result.clone()))
+                    );
+                    result
+                }
+            }
+        }
+    }
 }
 
 impl Parser {
@@ -41,19 +89,13 @@ impl Parser {
         None
     }
 
-    fn expect<F, R>(&mut self, method: F) -> Option<R>
-        where F: Fn(&mut Parser) -> Option<R> 
-    {
-        method(self)
-    }
-
     fn repeat<F, R>(&mut self, method: F, allow_empty: bool) -> Option<Vec<R>>
         where F: Copy + Fn(&mut Parser) -> Option<R>
     {
         let pos = self.mark();
         let mut results = Vec::new();
         loop {
-            match self.expect(method) {
+            match method(self) {
                 Some(result) => results.push(result),
                 None => break
             };
@@ -67,7 +109,7 @@ impl Parser {
     }
 
     pub fn parse(tokens: Vec<Token>) {
-        let mut parser = Parser{tokens, token_pos: 0};
+        let mut parser = Parser{tokens, token_pos: 0, memo: HashMap::new()};
         match parser.statements() { 
             Some(x) => {
                 println!("Parsed: {:#?}", x);
@@ -78,35 +120,39 @@ impl Parser {
         };
     }
 
-
-    pub fn statements(&mut self) -> Option<Vec<ast::StatementNode>> {
+    memoise!(statements_ as statements -> VecStatementNode);
+    pub fn statements_(&mut self) -> Option<Vec<StatementNode>> {
         self.repeat(Parser::statement, true)
     }
 
-    pub fn statement(&mut self) -> Option<ast::StatementNode> {
-        if let Some(stmt) = self.expect(Parser::let_unlet) {
+
+    memoise!(statement_ as statement -> StatementNode);
+    pub fn statement_(&mut self) -> Option<StatementNode> {
+        if let Some(stmt) = self.let_unlet() {
             if self.expect_literal(";").is_some() {
                 return Some(stmt);}}
         None
     }
 
-    pub fn let_unlet(&mut self) -> Option<ast::StatementNode> {
+    
+    memoise!(let_unlet_ as let_unlet -> StatementNode);
+    pub fn let_unlet_(&mut self) -> Option<StatementNode> {
         let pos = self.mark();
 
-        if let Some(name) = self.expect(Parser::name) {
+        if let Some(name) = self.name() {
         if self.expect_literal(":=").is_some() {
-        if let Some(rhs) = self.expect(Parser::expression) {
-            return Some(ast::StatementNode::LetUnlet(Box::new(
-                ast::LetUnletNode{name, rhs, is_unlet: false}
+        if let Some(rhs) = self.expression() {
+            return Some(StatementNode::LetUnlet(Box::new(
+                LetUnletNode{name, rhs, is_unlet: false}
             )));
         }}};
         self.reset(pos);
 
-        if let Some(name) = self.expect(Parser::name) {
+        if let Some(name) = self.name() {
         if self.expect_literal("=:").is_some() {
-        if let Some(rhs) = self.expect(Parser::expression) {
-            return Some(ast::StatementNode::LetUnlet(Box::new(
-                ast::LetUnletNode{name, rhs, is_unlet: true}
+        if let Some(rhs) = self.expression() {
+            return Some(StatementNode::LetUnlet(Box::new(
+                LetUnletNode{name, rhs, is_unlet: true}
             )));
         }}};
 
@@ -114,22 +160,24 @@ impl Parser {
         None
     }
 
-    pub fn expression(&mut self) -> Option<ast::ExpressionNode> {
+
+    memoise!(expression_ as expression -> ExpressionNode);
+    pub fn expression_(&mut self) -> Option<ExpressionNode> {
         let pos = self.mark();
 
         if let Some(token) = self.expect_type("NUMBER") {
             let value = Fraction::from_str(&token.string_[..]).unwrap();
-            let value = ast::FractionNode{value};
-            return Some(ast::ExpressionNode::Fraction(Box::new(value)));
+            let value = FractionNode{value};
+            return Some(ExpressionNode::Fraction(Box::new(value)));
         };
 
 
-        if let Some(lhs) = self.expect(Parser::expression) {
-        if let Some(op)  = self.expect(Parser::binop) {
-        if let Some(rhs) = self.expect(Parser::expression) {
+        if let Some(lhs) = self.expression() {
+        if let Some(op)  = self.binop() {
+        if let Some(rhs) = self.expression() {
             return Some(
-                ast::ExpressionNode::Binop(Box::new(
-                    ast::BinopNode{lhs, rhs, op}
+                ExpressionNode::Binop(Box::new(
+                    BinopNode{lhs, rhs, op}
             )));
         }}};
 
@@ -137,7 +185,9 @@ impl Parser {
         None
     }
 
-    pub fn binop(&mut self) -> Option<Instruction> {
+
+    memoise!(binop_ as binop -> Instruction);
+    pub fn binop_(&mut self) -> Option<Instruction> {
         if self.expect_literal("+").is_some() { return Some(Instruction::BinopAdd) };
         if self.expect_literal("-").is_some() { return Some(Instruction::BinopSub) };
         if self.expect_literal("*").is_some() { return Some(Instruction::BinopMul) };
@@ -145,23 +195,26 @@ impl Parser {
         None
     }
 
-    pub fn lookup(&mut self) -> Option<ast::LookupNode> {
+
+    memoise!(lookup_ as lookup -> LookupNode);
+    pub fn lookup_(&mut self) -> Option<LookupNode> {
         let pos = self.mark();
 
-        if let Some(name)    = self.expect(Parser::name) {
+        if let Some(name)    = self.name() {
         if let Some(indices) = self.repeat(Parser::index, true) {
-            return Some(ast::LookupNode{name, indices});
+            return Some(LookupNode{name, indices});
         }};
 
         self.reset(pos);
         None
     }
 
-    pub fn index(&mut self) -> Option<ast::ExpressionNode> {
+    memoise!(index_ as index -> ExpressionNode);
+    pub fn index_(&mut self) -> Option<ExpressionNode> {
         let pos = self.mark();
 
         if self.expect_literal("[").is_some() {
-        if let Some(expr) = self.expect(Parser::expression) {
+        if let Some(expr) = self.expression() {
         if self.expect_literal("]").is_some() {
             return Some(expr);
         }}};
@@ -170,7 +223,8 @@ impl Parser {
         None
     }
 
-    pub fn name(&mut self) -> Option<String> {
+    memoise!(name_ as name -> String);
+    pub fn name_(&mut self) -> Option<String> {
         let pos = self.mark();
 
         let dot = self.expect_literal(".");

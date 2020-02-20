@@ -4,14 +4,14 @@ use std::fmt;
 use crate::interpreter;
 
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum ExpressionNode {
     Fraction(Box<FractionNode>),
     Lookup(Box<LookupNode>),
     Binop(Box<BinopNode>)
 }
 
-
+#[derive(Clone)]
 pub struct FractionNode {
     pub value: interpreter::Fraction
 }
@@ -22,13 +22,13 @@ impl fmt::Debug for FractionNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LookupNode {
     pub name: String,
     pub indices: Vec<ExpressionNode>
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct BinopNode {
     pub lhs: ExpressionNode,
     pub rhs: ExpressionNode,
@@ -36,12 +36,12 @@ pub struct BinopNode {
 }
 
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum StatementNode {
     LetUnlet(Box<LetUnletNode>)
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LetUnletNode {
     pub is_unlet: bool,
     pub name: String,
