@@ -23,7 +23,7 @@ pub fn tokenise(data: &String) -> Vec<Token> {
     + r"|\+|\-|\*|/"
     + r"|=|<|>"
     + r"|\[|\]|\(|\)|\{|\}"
-    + r"|;"
+    + r"|;|~|#"
     + r")")).unwrap();
   
     /*let mut keywords = HashSet::new();

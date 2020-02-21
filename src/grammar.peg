@@ -1,11 +1,15 @@
 
 
-statement: let_stmt | unlet_stmt ;
+statement: (let_stmt | unlet_stmt) ';' {t0};
 
+if_stmt: 'if' '(' expression ')' 
+         '{' statement* '}'
+         ('else' '{' statement* '}' )?
+         '~' 'if' '(' expression? ')' ;
 
-unlet_stmt: name '=:' expression ';' { ast::UnletStmt::new(t0, t2) };
+unlet_stmt: name '=:' expression { ast::UnletStmt::new(t0, t2) };
 
-let_stmt: name ':=' expression ';' { ast::LetStmt::new(t0, t2) };
+let_stmt: name ':=' expression { ast::LetStmt::new(t0, t2) };
 
 
 expression: expression binop expression

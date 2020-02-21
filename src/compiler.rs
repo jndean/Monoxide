@@ -147,7 +147,8 @@ pub fn stmt_from_fwd_bkwd(fwd: Vec<Instruction>, bkwd: Vec<Instruction>) -> Stat
 impl ast::StatementNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Statement> {
         match &self {
-            ast::StatementNode::LetUnlet(valbox) => valbox.compile(ctx)
+            ast::StatementNode::LetUnlet(valbox) => valbox.compile(ctx),
+            _ => unimplemented!()
         }
     }
 }
