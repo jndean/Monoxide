@@ -56,3 +56,8 @@ pub struct IfNode {
     pub else_stmts: Vec<StatementNode>,
     pub bkwd_expr: ExpressionNode
 }
+
+#[derive(Clone, Debug)]
+pub struct Module {
+    pub stmts: Vec<StatementNode>
+}

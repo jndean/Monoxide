@@ -5,7 +5,7 @@ use std::str::FromStr;
 use crate::tokeniser::Token;
 use crate::ast::{
     StatementNode, ExpressionNode, LookupNode, LetUnletNode,
-    FractionNode, BinopNode, IfNode
+    FractionNode, BinopNode, IfNode, Module
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -26,7 +26,7 @@ pub enum Parsed {
     ExpressionNode(Option<ExpressionNode>),
     Instruction(Option<Instruction>),
     LookupNode(Option<LookupNode>),
-    IfNode(Option<IfNode>),
+    IfNode(Option<IfNode>)
 }
 
 
@@ -57,6 +57,16 @@ macro_rules! memoise {
             }
         }
 
+    }
+}
+
+
+pub fn parse(tokens: Vec<Token>) -> Option<Module>{
+    let mut parser = Parser{tokens, token_pos: 0, memo: HashMap::new()};
+    if let Some(stmts) = parser.statements() {
+        Some(Module{stmts})
+    } else {
+        None
     }
 }
 
@@ -110,17 +120,6 @@ impl Parser {
         }
     }
 
-    pub fn parse(tokens: Vec<Token>) {
-        let mut parser = Parser{tokens, token_pos: 0, memo: HashMap::new()};
-        match parser.statements() { 
-            Some(x) => {
-                println!("Parsed: {:#?}", x);
-            }, 
-            None => {
-                println!("Failed to parse tokens");
-            }
-        };
-    }
 
     memoise!(statements_ as statements -> VecStatementNode);
     pub fn statements_(&mut self) -> Option<Vec<StatementNode>> {

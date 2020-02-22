@@ -26,6 +26,16 @@ impl fmt::Debug for Variable {
 }
 
 
+impl Variable {
+    fn to_bool(&self) -> bool {
+        match self {
+            Variable::Frac(value) => *value.numer() == BigInt::from(0),
+            Variable::Array(items) => items.len() > 0
+        }
+    }
+}
+
+
 #[derive(Debug, Clone)]
 pub enum Instruction {
     LoadConst{idx: usize},
@@ -44,7 +54,12 @@ pub enum Instruction {
     IJump{delta: isize},  // Instruction Jump //
     SJump{delta: isize},  // Statement Jump //
     IJumpIfBackwards{delta: isize},
+    IJumpIfForwards{delta: isize},
     SJumpIfBackwards{delta: isize},
+    SJumpIfForwards{delta: isize},
+    IJumpIfTrue{delta: isize},
+    SJumpIfTrue{delta: isize},
+    SJumpIfFalse{delta: isize},
     CreateIndex{size: usize},
     Quit,
     DebugPrint,
@@ -167,9 +182,14 @@ impl<'a> Interpreter<'a> {
                     Instruction::DebugPrint => self.debug_print(),
                     Instruction::SJump{delta} => self.s_jump(*delta),
                     Instruction::SJumpIfBackwards{delta} => if !self.forwards { self.s_jump(*delta) },
+                    Instruction::SJumpIfForwards{delta} => if self.forwards { self.s_jump(*delta) },
                     Instruction::IJump{delta} => self.i_jump(*delta),
                     Instruction::IJumpIfBackwards{delta} => if !self.forwards { self.i_jump(*delta) },
+                    Instruction::IJumpIfForwards{delta} => if self.forwards { self.i_jump(*delta) },
                     Instruction::CreateIndex{size} => self.create_index(*size),
+                    Instruction::IJumpIfTrue{delta} => self.i_jump_if_true(*delta),
+                    Instruction::SJumpIfTrue{delta} => self.s_jump_if_true(*delta),
+                    Instruction::SJumpIfFalse{delta} => self.s_jump_if_false(*delta),
                     Instruction::Pull => self.pull(),
 
                     Instruction::Quit => break 'statement_loop
@@ -195,13 +215,39 @@ impl<'a> Interpreter<'a> {
         self.stmt_pos = if forwards {0} else {func.code.len() - 1};
     }
 
+    #[inline]
     fn i_jump(&mut self, delta: isize) {
         self.inst_pos = ((self.inst_pos as isize) + delta) as usize;
     }
 
+    #[inline]
     fn s_jump(&mut self, delta: isize) {
         self.inst_pos = 0;
         self.stmt_pos = ((self.stmt_pos as isize) + delta) as usize;        
+    }
+
+    fn i_jump_if_true(&mut self, delta: isize) {
+        let condition = self.pop();
+        let var = self.stackobj_as_varref(&condition);
+        if var.to_bool() {
+            self.i_jump(delta);
+        }
+    }
+
+    fn s_jump_if_true(&mut self, delta: isize) {
+        let stackobj = self.pop();
+        let condition_var = self.stackobj_as_varref(&stackobj);
+        if condition_var.to_bool() {
+            self.s_jump(delta);
+        }
+    }
+
+    fn s_jump_if_false(&mut self, delta: isize) {
+        let stackobj = self.pop();
+        let condition_var = self.stackobj_as_varref(&stackobj);
+        if !condition_var.to_bool() {
+            self.s_jump(delta);
+        }
     }
 
     fn reverse(&mut self) {

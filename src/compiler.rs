@@ -148,7 +148,7 @@ impl ast::StatementNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Statement> {
         match &self {
             ast::StatementNode::LetUnlet(valbox) => valbox.compile(ctx),
-            _ => unimplemented!()
+            ast::StatementNode::If(valbox) => valbox.compile(ctx)
         }
     }
 }
@@ -173,5 +173,50 @@ impl ast::LetUnletNode {
         } else {
             vec![stmt_from_fwd_bkwd(fwd_stmt, bkwd_stmt)]
         }
+    }
+}
+
+impl ast::IfNode {
+    pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Statement> {
+        let fwd_expr = self.fwd_expr.compile(ctx);
+        let bkwd_expr = self.bkwd_expr.compile(ctx);
+        let if_block = self.if_stmts.iter()
+                                    .map(|stmt| stmt.compile(ctx))
+                                    .flatten().collect::<Vec<Statement>>();
+        let else_block = self.else_stmts.iter()
+                                        .map(|stmt| stmt.compile(ctx))
+                                        .flatten().collect::<Vec<Statement>>();
+        
+        let mut start_stmt = Vec::with_capacity(fwd_expr.len() + 2);
+        start_stmt.push(Instruction::SJumpIfBackwards{delta: -1});
+        start_stmt.extend(fwd_expr);
+        start_stmt.push(Instruction::SJumpIfFalse{delta: (if_block.len() + 2) as isize});
+
+        let mid_stmt = vec![
+            Instruction::SJumpIfBackwards{delta: -(if_block.len() as isize) - 2},
+            Instruction::SJump{delta: (else_block.len() + 2) as isize}
+        ];
+
+        let mut end_stmt = Vec::with_capacity(bkwd_expr.len() + 2);
+        end_stmt.push(Instruction::SJumpIfForwards{delta: 1});
+        end_stmt.extend(bkwd_expr);
+        end_stmt.push(Instruction::SJumpIfTrue{delta: -(else_block.len() as isize) - 2});
+
+        let mut ret = Vec::with_capacity(if_block.len() + else_block.len() + 3);
+        ret.push(start_stmt);
+        ret.extend(if_block);
+        ret.push(mid_stmt);
+        ret.extend(else_block);
+        ret.push(end_stmt);
+        ret
+    }
+}
+
+impl ast::Module {
+    pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Statement> {
+        self.stmts.iter()
+                  .map(|stmt| stmt.compile(ctx))
+                  .flatten()
+                  .collect()
     }
 }

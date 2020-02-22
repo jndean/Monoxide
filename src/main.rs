@@ -105,8 +105,16 @@ fn main() {
         .expect("File io error");
     let tokens = tokeniser::tokenise(&src);
     println!("{:#?}", tokens);
-    parser::Parser::parse(tokens);
+    if let Some(program) = parser::parse(tokens) {
+        println!("Parsed: {:#?}", program);
+        let mut compiler = compiler::CompilerCtx::new();
+        let code = program.compile(&mut compiler);
+        println!("Code: {:#?}", code);
+    } else {
+        println!("Failed to parse");
+    }
     
+
 
     /*
     let mut compiler = compiler::CompilerCtx::new();
