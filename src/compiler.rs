@@ -85,7 +85,7 @@ impl CompilerCtx {
 
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Code {
     fwd: Vec<Instruction>,
     bkwd: Vec<Instruction>,
@@ -184,8 +184,8 @@ impl ast::FractionNode {
 
 impl ast::LookupNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
-        let idx = ctx.lookup_local(&self.name);
-        let mut instructions = vec![Instruction::LoadRegister{idx}];
+        let register = ctx.lookup_local(&self.name);
+        let mut instructions = vec![Instruction::LoadRegister{register}];
         
         // Handle array lookups //
         if !self.indices.is_empty() {
@@ -223,23 +223,19 @@ impl ast::StatementNode {
 
 impl ast::LetUnletNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
-        let register = if self.is_unlet {
-            ctx.free_local(&self.name)
-        } else {
-            ctx.create_local(&self.name)
-        };
-
-        let mut fwd = Vec::new();
-        fwd.extend(self.rhs.compile(ctx));
-        fwd.push(Instruction::StoreRegister{idx:register});
-
-        let bkwd = vec![Instruction::FreeRegister{idx: register}];
-
+        let mut code = Code::new();
         if self.is_unlet {
-            Code{fwd:bkwd, bkwd:fwd, links: Vec::new()}
+            let register = ctx.free_local(&self.name);
+            code.push_fwd(Instruction::FreeRegister{register});
+            code.push_bkwd(Instruction::StoreRegister{register});
+            code.extend_bkwd(self.rhs.compile(ctx));
         } else {
-            Code{fwd, bkwd, links: Vec::new()}
+            let register = ctx.create_local(&self.name);
+            code.extend_fwd(self.rhs.compile(ctx));
+            code.push_fwd(Instruction::StoreRegister{register});
+            code.push_bkwd(Instruction::FreeRegister{register});
         }
+        code
     }
 }
 
@@ -257,6 +253,8 @@ impl ast::IfNode {
         }
         let if_bkwd_len = if_block.bkwd_len() as isize;
         let else_bkwd_len = else_block.bkwd_len() as isize;
+
+        println!("{:#?}", if_block);
         
         let mut code = Code::with_capacity(
             if_block.fwd_len() + else_block.fwd_len() + fwd_expr.len() + 2, 

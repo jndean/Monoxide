@@ -39,9 +39,9 @@ impl Variable {
 #[derive(Debug, Clone)]
 pub enum Instruction {
     LoadConst{idx: usize},
-    LoadRegister{idx: usize},
-    StoreRegister{idx: usize},
-    FreeRegister{idx: usize},
+    LoadRegister{register: usize},
+    StoreRegister{register: usize},
+    FreeRegister{register: usize},
     Load,
     LoadNoPop,
     Store,
@@ -140,7 +140,7 @@ impl<'a> Interpreter<'a> {
 
     pub fn run(&mut self) -> () {
 
-        let mut instructions = &self.code.fwd;
+        let instructions = &self.code.fwd;
 
         'instruction_loop: loop {
 
@@ -151,9 +151,9 @@ impl<'a> Interpreter<'a> {
 
             match instruction {
                 Instruction::LoadConst{idx} => self.load_const(*idx),
-                Instruction::LoadRegister{idx} => self.load_register(*idx),
-                Instruction::StoreRegister{idx} => self.store_register(*idx),
-                Instruction::FreeRegister{idx} => self.free_register(*idx),
+                Instruction::LoadRegister{register} => self.load_register(*register),
+                Instruction::StoreRegister{register} => self.store_register(*register),
+                Instruction::FreeRegister{register} => self.free_register(*register),
                 Instruction::Load => self.load(),
                 Instruction::LoadNoPop => self.load_nopop(),
                 Instruction::Store => self.store(),
