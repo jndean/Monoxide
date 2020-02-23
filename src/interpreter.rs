@@ -50,23 +50,14 @@ pub enum Instruction {
     BinopSub,
     BinopMul,
     BinopDiv,
-    Reverse,
-    IJump{delta: isize},  // Instruction Jump //
-    SJump{delta: isize},  // Statement Jump //
-    IJumpIfBackwards{delta: isize},
-    IJumpIfForwards{delta: isize},
-    SJumpIfBackwards{delta: isize},
-    SJumpIfForwards{delta: isize},
-    IJumpIfTrue{delta: isize},
-    SJumpIfTrue{delta: isize},
-    SJumpIfFalse{delta: isize},
+    Reverse{idx: usize},
+    Jump{delta: isize},  // Instruction Jump //
+    JumpIfTrue{delta: isize},    
+    JumpIfFalse{delta: isize},
     CreateIndex{size: usize},
     Quit,
     DebugPrint,
 }
-
-pub type Statement = Vec<Instruction>;
-
 
 #[derive(Debug)]
 pub enum StackObject {
@@ -75,15 +66,20 @@ pub enum StackObject {
     IndexVar(Vec<usize>),
 }
 
+#[derive(Debug)]
+pub struct Code {
+    pub fwd: Vec<Instruction>,
+    pub bkwd: Vec<Instruction>
+}
+
 
 #[derive(Debug)]
 pub struct Interpreter<'a> {
     functions: &'a Vec<Function>,
     stack: Vec<StackObject>,
 
-    code: &'a Vec<Statement>,
-    stmt_pos: usize,
-    inst_pos: usize,
+    code: &'a Code,
+    ip: usize,
     forwards: bool,
     registers: Vec<Option<Variable>>,
     consts: &'a Vec<Variable>,
@@ -94,8 +90,8 @@ pub struct Interpreter<'a> {
 
 #[derive(Debug)]
 pub struct Scope<'a> {
-    code: &'a Vec<Statement>,
-    stmt_pos: usize,
+    code: &'a Code,
+    ip: usize,
     forwards: bool,
     registers: Vec<Option<Variable>>,
     consts: &'a Vec<Variable>
@@ -104,7 +100,7 @@ pub struct Scope<'a> {
 
 #[derive(Debug)]
 pub struct Function {
-    pub code: Vec<Statement>,
+    pub code: Code,
     pub consts: Vec<Variable>,
     pub num_registers: usize
 }
@@ -134,8 +130,7 @@ impl<'a> Interpreter<'a> {
             functions,
             stack: Vec::new(),
             code: &main.code,
-            stmt_pos: 0,
-            inst_pos: 0,
+            ip: 0,
             forwards: true,
             registers: vec![None; main.num_registers],
             consts: &main.consts,
@@ -145,58 +140,39 @@ impl<'a> Interpreter<'a> {
 
     pub fn run(&mut self) -> () {
 
-        'statement_loop: loop {
+        let mut instructions = &self.code.fwd;
 
-            let statement = match self.code.get(self.stmt_pos) {
-                Some(stmt) => stmt,
+        'instruction_loop: loop {
+
+            let instruction = match instructions.get(self.ip) {
+                Some(inst) => inst,
                 None => break
             };
 
-            'instruction_loop: loop {
-
-                let instruction = match statement.get(self.inst_pos) {
-                    Some(inst) => inst,
-                    None => {
-                        if self.forwards { 
-                            self.s_jump(1)
-                        } else { 
-                            self.s_jump(-1)
-                        };
-                        break
-                    }
-                };
-
-                match instruction {
-                    Instruction::LoadConst{idx} => self.load_const(*idx),
-                    Instruction::LoadRegister{idx} => self.load_register(*idx),
-                    Instruction::StoreRegister{idx} => self.store_register(*idx),
-                    Instruction::FreeRegister{idx} => self.free_register(*idx),
-                    Instruction::Load => self.load(),
-                    Instruction::LoadNoPop => self.load_nopop(),
-                    Instruction::Store => self.store(),
-                    Instruction::BinopAdd => self.binop_add(),
-                    Instruction::BinopSub => self.binop_sub(),
-                    Instruction::BinopMul => self.binop_mul(),
-                    Instruction::BinopDiv => self.binop_div(),
-                    Instruction::Reverse => self.reverse(),
-                    Instruction::DebugPrint => self.debug_print(),
-                    Instruction::SJump{delta} => self.s_jump(*delta),
-                    Instruction::SJumpIfBackwards{delta} => if !self.forwards { self.s_jump(*delta) },
-                    Instruction::SJumpIfForwards{delta} => if self.forwards { self.s_jump(*delta) },
-                    Instruction::IJump{delta} => self.i_jump(*delta),
-                    Instruction::IJumpIfBackwards{delta} => if !self.forwards { self.i_jump(*delta) },
-                    Instruction::IJumpIfForwards{delta} => if self.forwards { self.i_jump(*delta) },
-                    Instruction::CreateIndex{size} => self.create_index(*size),
-                    Instruction::IJumpIfTrue{delta} => self.i_jump_if_true(*delta),
-                    Instruction::SJumpIfTrue{delta} => self.s_jump_if_true(*delta),
-                    Instruction::SJumpIfFalse{delta} => self.s_jump_if_false(*delta),
-                    Instruction::Pull => self.pull(),
-
-                    Instruction::Quit => break 'statement_loop
-                }
-
-                self.inst_pos += 1;
+            match instruction {
+                Instruction::LoadConst{idx} => self.load_const(*idx),
+                Instruction::LoadRegister{idx} => self.load_register(*idx),
+                Instruction::StoreRegister{idx} => self.store_register(*idx),
+                Instruction::FreeRegister{idx} => self.free_register(*idx),
+                Instruction::Load => self.load(),
+                Instruction::LoadNoPop => self.load_nopop(),
+                Instruction::Store => self.store(),
+                Instruction::BinopAdd => self.binop_add(),
+                Instruction::BinopSub => self.binop_sub(),
+                Instruction::BinopMul => self.binop_mul(),
+                Instruction::BinopDiv => self.binop_div(),
+                Instruction::Reverse{idx} => self.reverse(*idx),
+                Instruction::Jump{delta} => self.jump(*delta),
+                Instruction::CreateIndex{size} => self.create_index(*size),
+                Instruction::JumpIfTrue{delta} => self.jump_if_true(*delta),
+                Instruction::JumpIfFalse{delta} => self.jump_if_false(*delta),
+                Instruction::Pull => self.pull(),
+                
+                Instruction::Quit => break 'instruction_loop,
+                Instruction::DebugPrint => self.debug_print(),
             }
+
+            self.ip += 1;
         }
     }
 
@@ -207,51 +183,38 @@ impl<'a> Interpreter<'a> {
                 code  : replace(&mut self.code  , &func.code  ),
                 consts: replace(&mut self.consts, &func.consts),
                 registers: replace(&mut self.registers, vec![None; func.num_registers]),
-                stmt_pos: self.stmt_pos,
+                ip: self.ip,
                 forwards: self.forwards,
             }
         );
         self.forwards = forwards;
-        self.stmt_pos = if forwards {0} else {func.code.len() - 1};
+        self.ip = if forwards {0} else {func.code.bkwd.len() - 1};
     }
 
     #[inline]
-    fn i_jump(&mut self, delta: isize) {
-        self.inst_pos = ((self.inst_pos as isize) + delta) as usize;
+    fn jump(&mut self, delta: isize) {
+        self.ip = ((self.ip as isize) + delta) as usize;
     }
 
-    #[inline]
-    fn s_jump(&mut self, delta: isize) {
-        self.inst_pos = 0;
-        self.stmt_pos = ((self.stmt_pos as isize) + delta) as usize;        
-    }
-
-    fn i_jump_if_true(&mut self, delta: isize) {
+    fn jump_if_true(&mut self, delta: isize) {
         let condition = self.pop();
         let var = self.stackobj_as_varref(&condition);
         if var.to_bool() {
-            self.i_jump(delta);
+            self.jump(delta);
         }
     }
 
-    fn s_jump_if_true(&mut self, delta: isize) {
-        let stackobj = self.pop();
-        let condition_var = self.stackobj_as_varref(&stackobj);
-        if condition_var.to_bool() {
-            self.s_jump(delta);
-        }
-    }
-
-    fn s_jump_if_false(&mut self, delta: isize) {
+    fn jump_if_false(&mut self, delta: isize) {
         let stackobj = self.pop();
         let condition_var = self.stackobj_as_varref(&stackobj);
         if !condition_var.to_bool() {
-            self.s_jump(delta);
+            self.jump(delta);
         }
     }
 
-    fn reverse(&mut self) {
+    fn reverse(&mut self, idx: usize) {
         self.forwards = !self.forwards;
+        self.ip = idx;
     }
 
     fn load_const(&mut self, idx: usize) {

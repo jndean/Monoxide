@@ -10,7 +10,7 @@ mod interpreter;
 mod ast;
 mod compiler;
 mod parser;
-use interpreter::{Instruction, Statement};
+use interpreter::Instruction;
 
 type Fraction = num_rational::BigRational;
 type BigInt = num_bigint::BigInt;
@@ -109,7 +109,7 @@ fn main() {
         println!("Parsed: {:#?}", program);
         let mut compiler = compiler::CompilerCtx::new();
         let code = program.compile(&mut compiler);
-        println!("Code: {:#?}", code);
+        println!("Code: {:#?}", compiler::Code::finalise(code));
     } else {
         println!("Failed to parse");
     }

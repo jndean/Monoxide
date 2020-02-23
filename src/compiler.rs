@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::ast;
 use crate::interpreter;
-use interpreter::{Instruction, Statement};
+use interpreter::Instruction;
 
 
 #[derive(Debug)]
@@ -85,6 +85,82 @@ impl CompilerCtx {
 
 }
 
+#[derive(Default)]
+pub struct Code {
+    fwd: Vec<Instruction>,
+    bkwd: Vec<Instruction>,
+    links: Vec<(usize, usize)>
+}
+
+impl Code {
+    pub fn new() -> Code {
+        Default::default()
+    }
+
+    pub fn with_capacity(l1: usize, l2: usize) -> Code {
+        Code{
+            fwd: Vec::with_capacity(l1),
+            bkwd: Vec::with_capacity(l2),
+            links: Vec::new()
+        }
+    }
+
+    pub fn add_reverse(&mut self, fwd_idx: usize, bkwd_idx: usize) {
+        self.links.push((fwd_idx, bkwd_idx));
+    }
+
+    pub fn push_fwd(&mut self, x: Instruction) {
+        self.fwd.push(x);
+    }
+
+    pub fn push_bkwd(&mut self, x: Instruction) {
+        self.bkwd.push(x);
+    }
+
+    pub fn extend_fwd(&mut self, instructions: Vec<Instruction>) {
+        self.fwd.extend(instructions);
+    }
+    
+    pub fn extend_bkwd(&mut self, instructions: Vec<Instruction>) {
+        self.bkwd.extend(instructions.into_iter().rev());
+    }
+
+    pub fn fwd_len(&mut self) -> usize {
+        self.fwd.len()
+    }
+
+    pub fn bkwd_len(&mut self) -> usize {
+        self.bkwd.len()
+    }
+
+    pub fn extend(&mut self, other: Code) {
+        let Code{fwd, bkwd, links} = other;
+        let (flen, blen) = (self.fwd.len(), self.bkwd.len());
+        self.fwd.extend(fwd);
+        self.bkwd.extend(bkwd);
+        for (f, b) in links.into_iter() {
+            self.links.push((f + flen, b + blen));
+        }
+    }
+
+    pub fn finalise(proto: Code) -> interpreter::Code {
+        let Code{mut fwd, mut bkwd, links} = proto;
+        bkwd.reverse();
+        for (f, mut b) in links.into_iter() {
+            b = bkwd.len() - 1 - b;
+            match fwd[f] {
+                Instruction::Reverse{idx: _} => fwd[f] = Instruction::Reverse{idx: b},
+                _ => panic!()
+            }
+            match bkwd[b] {
+                Instruction::Reverse{idx: _} => bkwd[b] = Instruction::Reverse{idx: f},
+                _ => panic!()
+            }
+        }
+        interpreter::Code{fwd, bkwd}
+    }
+}
+
 
 impl ast::ExpressionNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
@@ -135,17 +211,8 @@ impl ast::BinopNode {
 }
 
 
-pub fn stmt_from_fwd_bkwd(fwd: Vec<Instruction>, bkwd: Vec<Instruction>) -> Statement {
-    let mut stmt = Vec::with_capacity(fwd.len() + bkwd.len() + 2);
-    stmt.push(Instruction::IJumpIfBackwards{delta: (fwd.len() + 1) as isize});
-    stmt.extend(fwd);
-    stmt.push(Instruction::IJump{delta: bkwd.len() as isize});
-    stmt.extend(bkwd);
-    stmt
-}
-
 impl ast::StatementNode {
-    pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Statement> {
+    pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
         match &self {
             ast::StatementNode::LetUnlet(valbox) => valbox.compile(ctx),
             ast::StatementNode::If(valbox) => valbox.compile(ctx)
@@ -155,68 +222,69 @@ impl ast::StatementNode {
 
 
 impl ast::LetUnletNode {
-    pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Statement> {
+    pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
         let register = if self.is_unlet {
             ctx.free_local(&self.name)
         } else {
             ctx.create_local(&self.name)
         };
 
-        let mut fwd_stmt = Vec::new();
-        fwd_stmt.extend(self.rhs.compile(ctx));
-        fwd_stmt.push(Instruction::StoreRegister{idx:register});
+        let mut fwd = Vec::new();
+        fwd.extend(self.rhs.compile(ctx));
+        fwd.push(Instruction::StoreRegister{idx:register});
 
-        let bkwd_stmt = vec![Instruction::FreeRegister{idx: register}];
+        let bkwd = vec![Instruction::FreeRegister{idx: register}];
 
         if self.is_unlet {
-            vec![stmt_from_fwd_bkwd(bkwd_stmt, fwd_stmt)]
+            Code{fwd:bkwd, bkwd:fwd, links: Vec::new()}
         } else {
-            vec![stmt_from_fwd_bkwd(fwd_stmt, bkwd_stmt)]
+            Code{fwd, bkwd, links: Vec::new()}
         }
     }
 }
 
 impl ast::IfNode {
-    pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Statement> {
+    pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
         let fwd_expr = self.fwd_expr.compile(ctx);
         let bkwd_expr = self.bkwd_expr.compile(ctx);
-        let if_block = self.if_stmts.iter()
-                                    .map(|stmt| stmt.compile(ctx))
-                                    .flatten().collect::<Vec<Statement>>();
-        let else_block = self.else_stmts.iter()
-                                        .map(|stmt| stmt.compile(ctx))
-                                        .flatten().collect::<Vec<Statement>>();
+        let mut if_block = Code::new();
+        for stmt in self.if_stmts.iter() {
+            if_block.extend(stmt.compile(ctx));
+        }
+        let mut else_block = Code::new();
+        for stmt in self.else_stmts.iter() {
+            else_block.extend(stmt.compile(ctx));
+        }
+        let if_bkwd_len = if_block.bkwd_len() as isize;
+        let else_bkwd_len = else_block.bkwd_len() as isize;
         
-        let mut start_stmt = Vec::with_capacity(fwd_expr.len() + 2);
-        start_stmt.push(Instruction::SJumpIfBackwards{delta: -1});
-        start_stmt.extend(fwd_expr);
-        start_stmt.push(Instruction::SJumpIfFalse{delta: (if_block.len() + 2) as isize});
+        let mut code = Code::with_capacity(
+            if_block.fwd_len() + else_block.fwd_len() + fwd_expr.len() + 2, 
+            if_block.bkwd_len() + else_block.bkwd_len() + bkwd_expr.len() + 2);
+        
+        code.extend_fwd(fwd_expr);
+        code.push_fwd(Instruction::JumpIfFalse{
+            delta: (if_block.fwd_len() + 1) as isize
+        });
+        code.extend(if_block);
+        code.push_fwd(Instruction::Jump{
+            delta: else_block.fwd_len() as isize
+        });
+        code.push_bkwd(Instruction::Jump{delta: if_bkwd_len});
+        code.extend(else_block);
+        code.push_bkwd(Instruction::JumpIfTrue{delta: else_bkwd_len + 1});
+        code.extend_bkwd(bkwd_expr);
 
-        let mid_stmt = vec![
-            Instruction::SJumpIfBackwards{delta: -(if_block.len() as isize) - 2},
-            Instruction::SJump{delta: (else_block.len() + 2) as isize}
-        ];
-
-        let mut end_stmt = Vec::with_capacity(bkwd_expr.len() + 2);
-        end_stmt.push(Instruction::SJumpIfForwards{delta: 1});
-        end_stmt.extend(bkwd_expr);
-        end_stmt.push(Instruction::SJumpIfTrue{delta: -(else_block.len() as isize) - 2});
-
-        let mut ret = Vec::with_capacity(if_block.len() + else_block.len() + 3);
-        ret.push(start_stmt);
-        ret.extend(if_block);
-        ret.push(mid_stmt);
-        ret.extend(else_block);
-        ret.push(end_stmt);
-        ret
+        code
     }
 }
 
 impl ast::Module {
-    pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Statement> {
-        self.stmts.iter()
-                  .map(|stmt| stmt.compile(ctx))
-                  .flatten()
-                  .collect()
+    pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
+        let mut code = Code::new();
+        for stmt in self.stmts.iter() {
+            code.extend(stmt.compile(ctx));
+        }
+        code
     }
 }
