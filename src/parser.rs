@@ -5,7 +5,7 @@ use std::str::FromStr;
 use crate::tokeniser::Token;
 use crate::ast::{
     StatementNode, ExpressionNode, LookupNode, LetUnletNode,
-    FractionNode, BinopNode, IfNode, ModopNode, Module
+    FractionNode, BinopNode, IfNode, ModopNode, FunctionNode,Module
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -26,7 +26,8 @@ pub enum Parsed {
     ExpressionNode(Option<ExpressionNode>),
     Instruction(Option<Instruction>),
     LookupNode(Option<LookupNode>),
-    IfNode(Option<IfNode>)
+    IfNode(Option<IfNode>),
+    FunctionNode(Option<FunctionNode>)
 }
 
 
@@ -63,8 +64,8 @@ macro_rules! memoise {
 
 pub fn parse(tokens: Vec<Token>) -> Option<Module>{
     let mut parser = Parser{tokens, token_pos: 0, memo: HashMap::new()};
-    if let Some(stmts) = parser.statements() {
-        Some(Module{stmts})
+    if let Some(func) = parser.function() {
+        Some(Module{functions: vec![func]})
     } else {
         None
     }
@@ -120,6 +121,58 @@ impl Parser {
         }
     }
 
+    memoise!(function_ as function -> FunctionNode);
+    pub fn function_(&mut self) -> Option<FunctionNode> {
+        let pos = self.mark();
+
+        if self.expect_literal("fn") {
+        if let Some(name) = self.name() {
+        if self.expect_literal("(") {
+        let borrow_params = self.name_list();
+        if self.expect_literal(")") {
+        if self.expect_literal("(") {
+        let steal_params = self.name_list();
+        if self.expect_literal(")") {
+        if self.expect_literal("{") {
+        if let Some(stmts) = self.statements() {
+        if self.expect_literal("}") {
+        if self.expect_literal("~") {
+        if self.name() == Some(name.clone()) {
+        if self.expect_literal("(") {
+        let return_params = self.name_list();
+        if self.expect_literal(")") {
+            return Some(FunctionNode{
+                name, borrow_params, steal_params, return_params, stmts
+            });
+        }}}}}}}}}}}}};
+
+        self.reset(pos);
+        None
+    }
+
+    pub fn name_list(&mut self) -> Vec<String> {
+        let pos = self.mark();
+        let mut result = Vec::new();
+        if let Some(item) = self.name() {
+            result.push(item);
+            result.extend(self.repeat(Parser::comma_name, true).unwrap());
+            return result;
+        }
+        self.reset(pos);
+        result
+    }
+
+    memoise!(comma_name_ as comma_name -> String);
+    pub fn comma_name_(&mut self) -> Option<String> {
+        let pos = self.mark();
+        if self.expect_literal(",") {
+            if let Some(name) = self.name() {
+                return Some(name);
+            }
+        }
+        self.reset(pos);
+        None
+    }
 
     memoise!(statements_ as statements -> VecStatementNode);
     pub fn statements_(&mut self) -> Option<Vec<StatementNode>> {
@@ -146,7 +199,6 @@ impl Parser {
         if self.expect_literal(")") {
         if self.expect_literal("{") {
         if let Some(if_stmts) = self.statements() {
-            println!("Gothere {}", self.mark());
         if self.expect_literal("}") {
         let else_stmts = self.else_block();
         if self.expect_literal("~") {

@@ -66,6 +66,15 @@ pub struct IfNode {
 }
 
 #[derive(Clone, Debug)]
-pub struct Module {
+pub struct FunctionNode {
+    pub name: String,
+    pub borrow_params: Vec<String>,
+    pub steal_params: Vec<String>,
+    pub return_params: Vec<String>,
     pub stmts: Vec<StatementNode>
+}
+
+#[derive(Clone, Debug)]
+pub struct Module {
+    pub functions: Vec<FunctionNode>
 }

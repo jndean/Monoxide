@@ -107,9 +107,10 @@ fn main() {
     println!("{:#?}", tokens);
     if let Some(program) = parser::parse(tokens) {
         println!("Parsed: {:#?}", program);
-        let mut compiler = compiler::CompilerCtx::new();
+        /*let mut compiler = compiler::CompilerCtx::new();
         let code = program.compile(&mut compiler);
         println!("Code: {:#?}", compiler::Code::finalise(code));
+        */
         /*
         let functions = vec![
             interpreter::Function{code, }

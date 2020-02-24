@@ -23,52 +23,13 @@ pub fn tokenise(data: &String) -> Vec<Token> {
     + r"|\+|\-|\*|/"
     + r"|=|<|>"
     + r"|\[|\]|\(|\)|\{|\}"
-    + r"|;|~|#"
+    + r"|;|~|#|,"
     + r")")).unwrap();
-  
-    /*let mut keywords = HashSet::new();
-    keywords.insert("import");
-    keywords.insert("as");
-    keywords.insert("global");
-    keywords.insert("let");
-    keywords.insert("unlet");
-    keywords.insert("func");
-    keywords.insert("return");
-    keywords.insert("println");
-    keywords.insert("print");
-    keywords.insert("if");
-    keywords.insert("fi");
-    keywords.insert("else");
-    keywords.insert("loop");
-    keywords.insert("pool");
-    keywords.insert("for");
-    keywords.insert("rof");
-    keywords.insert("call");
-    keywords.insert("uncall");
-    keywords.insert("do");
-    keywords.insert("undo");
-    keywords.insert("yield");
-    keywords.insert("swap");
-    keywords.insert("push");
-    keywords.insert("pop");
-    keywords.insert("try");
-    keywords.insert("catch");
-    keywords.insert("yrt");
-    keywords.insert("promote");
-    keywords.insert("in");
-    keywords.insert("to");
-    keywords.insert("by");
-    keywords.insert("tensor");
-    keywords.insert("barrier");
-    keywords.insert("mutex");
-    keywords.insert("xetum");
-    keywords.insert("TID");*/
 
     let mut ret = Vec::new();
     let mut pos = 0;
     let mut line = 1;
     let mut col = 0;
-    //let mut skip_newline = true;
     while pos < data.len() {
         
         if let Some(m) = name_regex.find(&data[pos..]) {

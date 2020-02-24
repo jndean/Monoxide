@@ -1,3 +1,6 @@
-x := 5;
-x -= 8;
-x =: 13;
+
+fn main(argv)(X, w, h) {
+    x := 5;
+    x -= 8;
+    x =: 13;
+} ~main(argv)

@@ -311,7 +311,7 @@ impl ast::IfNode {
     }
 }
 
-impl ast::Module {
+impl ast::FunctionNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
         let mut code = Code::new();
         for stmt in self.stmts.iter() {
