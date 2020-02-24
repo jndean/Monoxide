@@ -1,13 +1,14 @@
 
-use std::fmt;
-use std::mem::replace;
-use num_traits::cast::ToPrimitive;
-
 extern crate num_rational;
 extern crate num_bigint;
 
+use std::fmt;
+use std::mem::replace;
+use num_traits::cast::ToPrimitive;
+use num_bigint::BigInt;
+
+
 pub type Fraction = num_rational::BigRational;
-type BigInt = num_bigint::BigInt;
 
 
 #[derive(PartialEq, Clone)]

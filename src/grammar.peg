@@ -1,5 +1,11 @@
 
 
+function: 'fn' name '(' name_list ')' '(' name_list ')' '{'
+               statement*
+           '}' '~' name '(' name_list ')' ;
+
+name_list: name ^ ',' ;
+
 statement: (let_stmt | unlet_stmt | modop_stmt | if_stmt) ';' {t0};
 
 if_stmt: 'if' '(' expression ')' 

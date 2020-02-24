@@ -312,11 +312,18 @@ impl ast::IfNode {
 }
 
 impl ast::FunctionNode {
-    pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
+    pub fn compile(&self) -> interpreter::Function {
+        let mut ctx = CompilerCtx::new();
         let mut code = Code::new();
         for stmt in self.stmts.iter() {
-            code.extend(stmt.compile(ctx));
+            code.extend(stmt.compile(&mut ctx));
         }
-        code
+
+        let CompilerCtx{consts, num_registers, ..} = ctx;
+        interpreter::Function{
+            consts,
+            code: Code::finalise(code),
+            num_registers: num_registers as usize
+        }
     }
 }
