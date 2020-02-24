@@ -110,6 +110,12 @@ fn main() {
         let mut compiler = compiler::CompilerCtx::new();
         let code = program.compile(&mut compiler);
         println!("Code: {:#?}", compiler::Code::finalise(code));
+        /*
+        let functions = vec![
+            interpreter::Function{code, }
+        ]
+        let mut interpreter = interpreter::Interpreter::new()
+        */
     } else {
         println!("Failed to parse");
     }

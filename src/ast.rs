@@ -39,13 +39,21 @@ pub struct BinopNode {
 #[derive(Clone, Debug)]
 pub enum StatementNode {
     LetUnlet(Box<LetUnletNode>),
-    If(Box<IfNode>)
+    If(Box<IfNode>),
+    Modop(Box<ModopNode>)
 }
 
 #[derive(Clone, Debug)]
 pub struct LetUnletNode {
     pub is_unlet: bool,
     pub name: String,
+    pub rhs: ExpressionNode
+}
+
+#[derive(Clone, Debug)]
+pub struct ModopNode {
+    pub lookup: LookupNode,
+    pub op: interpreter::Instruction,
     pub rhs: ExpressionNode
 }
 

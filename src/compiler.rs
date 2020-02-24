@@ -213,9 +213,10 @@ impl ast::BinopNode {
 
 impl ast::StatementNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
-        match &self {
+        match self {
             ast::StatementNode::LetUnlet(valbox) => valbox.compile(ctx),
-            ast::StatementNode::If(valbox) => valbox.compile(ctx)
+            ast::StatementNode::If(valbox) => valbox.compile(ctx),
+            ast::StatementNode::Modop(valbox) => valbox.compile(ctx),
         }
     }
 }
@@ -238,6 +239,39 @@ impl ast::LetUnletNode {
         code
     }
 }
+
+
+impl ast::ModopNode {
+    pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
+        let lookup = self.lookup.compile(ctx);
+        let rhs = self.rhs.compile(ctx);
+        let bkwd_op = match self.op {
+            Instruction::BinopAdd => Instruction::BinopSub,
+            Instruction::BinopSub => Instruction::BinopAdd,
+            Instruction::BinopMul => Instruction::BinopDiv,
+            Instruction::BinopDiv => Instruction::BinopMul,
+            _ => unreachable!()
+        };
+
+        let capacity = lookup.len() + rhs.len() + 3;
+        let mut code = Code::with_capacity(capacity, capacity);
+
+        code.extend_fwd(lookup.clone());
+        code.push_fwd(Instruction::LoadNoPop);
+        code.extend_fwd(rhs.clone());
+        code.push_fwd(self.op.clone());
+        code.push_fwd(Instruction::Store);
+
+        code.push_bkwd(Instruction::Store);
+        code.push_bkwd(bkwd_op);
+        code.extend_bkwd(rhs);
+        code.push_bkwd(Instruction::LoadNoPop);
+        code.extend_bkwd(lookup);
+        
+        code
+    }
+}
+
 
 impl ast::IfNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {

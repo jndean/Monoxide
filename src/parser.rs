@@ -5,7 +5,7 @@ use std::str::FromStr;
 use crate::tokeniser::Token;
 use crate::ast::{
     StatementNode, ExpressionNode, LookupNode, LetUnletNode,
-    FractionNode, BinopNode, IfNode, Module
+    FractionNode, BinopNode, IfNode, ModopNode, Module
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -130,6 +130,7 @@ impl Parser {
     memoise!(statement_ as statement -> StatementNode);
     pub fn statement_(&mut self) -> Option<StatementNode> {
         if let Some(stmt) = self.letunlet_stmt() {return Some(stmt);}
+        if let Some(stmt) = self.modop_stmt() {return Some(stmt);}
         if let Some(stmt) = self.if_stmt() {return Some(stmt);}
         None
     }
@@ -185,6 +186,25 @@ impl Parser {
         self.reset(pos);
         None
     }
+
+
+    memoise!(modop_stmt_ as modop_stmt -> StatementNode);
+    pub fn modop_stmt_(&mut self) -> Option<StatementNode> {
+        let pos = self.mark();
+
+        if let Some(lookup) = self.lookup() {
+        if let Some(op) = self.modop() {
+        if let Some(rhs) = self.expression() {
+        if self.expect_literal(";") {
+            return Some(StatementNode::Modop(Box::new(
+                ModopNode{lookup, op, rhs}
+            )));
+        }}}};
+
+        self.reset(pos);
+        None
+    }
+
 
     memoise!(letunlet_stmt_ as letunlet_stmt -> StatementNode);
     pub fn letunlet_stmt_(&mut self) -> Option<StatementNode> {
@@ -245,6 +265,16 @@ impl Parser {
         if self.expect_literal("-") { return Some(Instruction::BinopSub) };
         if self.expect_literal("*") { return Some(Instruction::BinopMul) };
         if self.expect_literal("/") { return Some(Instruction::BinopDiv) };
+        None
+    }
+
+
+    memoise!(modop_ as modop -> Instruction);
+    pub fn modop_(&mut self) -> Option<Instruction> {
+        if self.expect_literal("+=") { return Some(Instruction::BinopAdd) };
+        if self.expect_literal("-=") { return Some(Instruction::BinopSub) };
+        if self.expect_literal("*=") { return Some(Instruction::BinopMul) };
+        if self.expect_literal("/=") { return Some(Instruction::BinopDiv) };
         None
     }
 
