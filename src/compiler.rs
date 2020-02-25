@@ -89,7 +89,8 @@ impl CompilerCtx {
 pub struct Code {
     fwd: Vec<Instruction>,
     bkwd: Vec<Instruction>,
-    links: Vec<(usize, usize)>
+    f2b_links: Vec<(usize, usize)>,
+    b2f_links: Vec<(usize, usize)>
 }
 
 impl Code {
@@ -101,12 +102,21 @@ impl Code {
         Code{
             fwd: Vec::with_capacity(l1),
             bkwd: Vec::with_capacity(l2),
-            links: Vec::new()
+            f2b_links: Vec::new(),
+            b2f_links: Vec::new()
         }
     }
 
-    pub fn add_reverse(&mut self, fwd_idx: usize, bkwd_idx: usize) {
-        self.links.push((fwd_idx, bkwd_idx));
+    pub fn link_fwd2bkwd(&mut self) {
+        self.f2b_links.push((self.fwd.len(), self.bkwd.len()));
+        // Insert dummy instruction //
+        self.fwd.push(Instruction::Reverse{idx: 0});
+    }
+    
+    pub fn link_bkwd2fwd(&mut self) {
+        self.b2f_links.push((self.bkwd.len(), self.fwd.len()));
+        // Insert dummy instruction //
+        self.bkwd.push(Instruction::Reverse{idx: 0});
     }
 
     pub fn push_fwd(&mut self, x: Instruction) {
@@ -134,24 +144,30 @@ impl Code {
     }
 
     pub fn extend(&mut self, other: Code) {
-        let Code{fwd, bkwd, links} = other;
+        let Code{fwd, bkwd, f2b_links, b2f_links} = other;
         let (flen, blen) = (self.fwd.len(), self.bkwd.len());
         self.fwd.extend(fwd);
         self.bkwd.extend(bkwd);
-        for (f, b) in links.into_iter() {
-            self.links.push((f + flen, b + blen));
+        for (f, b) in f2b_links.into_iter() {
+            self.f2b_links.push((f + flen, b + blen));
+        }
+        for (b, f) in b2f_links.into_iter() {
+            self.b2f_links.push((b + blen, f + flen));
         }
     }
 
-    pub fn finalise(proto: Code) -> interpreter::Code {
-        let Code{mut fwd, mut bkwd, links} = proto;
+    pub fn finalise(code: Code) -> interpreter::Code {
+        let Code{mut fwd, mut bkwd, f2b_links, b2f_links} = code;
         bkwd.reverse();
-        for (f, mut b) in links.into_iter() {
-            b = bkwd.len() - 1 - b;
+        for (f, b) in f2b_links.into_iter() {
+            let b = bkwd.len() - b;
             match fwd[f] {
                 Instruction::Reverse{idx: _} => fwd[f] = Instruction::Reverse{idx: b},
                 _ => panic!()
             }
+        }
+        for (b, f) in b2f_links.into_iter() {
+            let b = bkwd.len() - b;
             match bkwd[b] {
                 Instruction::Reverse{idx: _} => bkwd[b] = Instruction::Reverse{idx: f},
                 _ => panic!()
@@ -217,6 +233,7 @@ impl ast::StatementNode {
             ast::StatementNode::LetUnlet(valbox) => valbox.compile(ctx),
             ast::StatementNode::If(valbox) => valbox.compile(ctx),
             ast::StatementNode::Modop(valbox) => valbox.compile(ctx),
+            ast::StatementNode::Catch(valbox) => valbox.compile(ctx)
         }
     }
 }
@@ -287,8 +304,6 @@ impl ast::IfNode {
         }
         let if_bkwd_len = if_block.bkwd_len() as isize;
         let else_bkwd_len = else_block.bkwd_len() as isize;
-
-        println!("{:#?}", if_block);
         
         let mut code = Code::with_capacity(
             if_block.fwd_len() + else_block.fwd_len() + fwd_expr.len() + 2, 
@@ -311,6 +326,16 @@ impl ast::IfNode {
     }
 }
 
+impl ast::CatchNode {
+    pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
+        let mut code = Code::new();
+        code.extend_fwd(self.expr.compile(ctx));
+        code.push_fwd(Instruction::JumpIfFalse{delta: 1});
+        code.link_fwd2bkwd();
+        code
+    }
+}
+
 impl ast::FunctionNode {
     pub fn compile(&self) -> interpreter::Function {
         let mut ctx = CompilerCtx::new();
@@ -324,6 +349,14 @@ impl ast::FunctionNode {
             consts,
             code: Code::finalise(code),
             num_registers: num_registers as usize
+        }
+    }
+}
+
+impl ast::Module {
+    pub fn compile(&self) -> interpreter::Module {
+        interpreter::Module{
+            functions: self.functions.iter().map(|f| f.compile()).collect()
         }
     }
 }

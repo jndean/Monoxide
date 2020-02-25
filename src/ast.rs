@@ -40,7 +40,8 @@ pub struct BinopNode {
 pub enum StatementNode {
     LetUnlet(Box<LetUnletNode>),
     If(Box<IfNode>),
-    Modop(Box<ModopNode>)
+    Modop(Box<ModopNode>),
+    Catch(Box<CatchNode>)
 }
 
 #[derive(Clone, Debug)]
@@ -64,6 +65,12 @@ pub struct IfNode {
     pub else_stmts: Vec<StatementNode>,
     pub bkwd_expr: ExpressionNode
 }
+
+#[derive(Clone, Debug)]
+pub struct CatchNode {
+    pub expr: ExpressionNode
+}
+
 
 #[derive(Clone, Debug)]
 pub struct FunctionNode {

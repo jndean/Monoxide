@@ -30,7 +30,7 @@ impl fmt::Debug for Variable {
 impl Variable {
     fn to_bool(&self) -> bool {
         match self {
-            Variable::Frac(value) => *value.numer() == BigInt::from(0),
+            Variable::Frac(value) => *value.numer() != BigInt::from(0),
             Variable::Array(items) => items.len() > 0
         }
     }
@@ -106,6 +106,12 @@ pub struct Function {
     pub num_registers: usize
 }
 
+#[derive(Debug)]
+pub struct Module {
+    pub functions: Vec<Function>
+}
+
+
 macro_rules! binop_method {
     ($name:ident, $op:tt) => {
         fn $name (&mut self) {
@@ -150,6 +156,8 @@ impl<'a> Interpreter<'a> {
                 None => break
             };
 
+            println!("IP: {}, {:?}", self.ip, instruction);
+
             match instruction {
                 Instruction::LoadConst{idx} => self.load_const(*idx),
                 Instruction::LoadRegister{register} => self.load_register(*register),
@@ -172,7 +180,7 @@ impl<'a> Interpreter<'a> {
                 Instruction::Quit => break 'instruction_loop,
                 Instruction::DebugPrint => self.debug_print(),
             }
-
+            
             self.ip += 1;
         }
     }
@@ -209,6 +217,7 @@ impl<'a> Interpreter<'a> {
         let stackobj = self.pop();
         let condition_var = self.stackobj_as_varref(&stackobj);
         if !condition_var.to_bool() {
+            println!("Jumping because false {:?}", stackobj);
             self.jump(delta);
         }
     }
@@ -350,7 +359,7 @@ impl<'a> Interpreter<'a> {
         self.stack.push(StackObject::FreeVar(value));
     }
 
-    fn debug_print(&self) {
+    pub fn debug_print(&self) {
         println!("registers: {:#?}\nStack: {:#?}\n----------", self.registers, self.stack);
     }
 }

@@ -5,7 +5,8 @@ use std::str::FromStr;
 use crate::tokeniser::Token;
 use crate::ast::{
     StatementNode, ExpressionNode, LookupNode, LetUnletNode,
-    FractionNode, BinopNode, IfNode, ModopNode, FunctionNode,Module
+    FractionNode, BinopNode, IfNode, ModopNode, FunctionNode,
+    CatchNode, Module
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -27,6 +28,7 @@ pub enum Parsed {
     Instruction(Option<Instruction>),
     LookupNode(Option<LookupNode>),
     IfNode(Option<IfNode>),
+    CatchNode(Option<CatchNode>),
     FunctionNode(Option<FunctionNode>)
 }
 
@@ -185,10 +187,30 @@ impl Parser {
         if let Some(stmt) = self.letunlet_stmt() {return Some(stmt);}
         if let Some(stmt) = self.modop_stmt() {return Some(stmt);}
         if let Some(stmt) = self.if_stmt() {return Some(stmt);}
+        if let Some(stmt) = self.catch_stmt() {return Some(stmt);}
         None
     }
 
     
+    memoise!(catch_stmt_ as catch_stmt -> StatementNode);
+    pub fn catch_stmt_(&mut self) -> Option<StatementNode> {
+        let pos = self.mark();
+
+        if self.expect_literal("catch") {
+        if self.expect_literal("(") {
+        if let Some(expr) = self.expression() {
+        if self.expect_literal(")") {
+        if self.expect_literal(";") {
+            return Some(StatementNode::Catch(Box::new(
+                CatchNode{expr}
+            )));
+        }}}}};
+
+        self.reset(pos);
+        None
+    }
+
+
     memoise!(if_stmt_ as if_stmt -> StatementNode);
     pub fn if_stmt_(&mut self) -> Option<StatementNode> {
         let pos = self.mark();

@@ -17,9 +17,12 @@ fn main() {
     let src = fs::read_to_string("examples/tmp.mx").expect("File io error");
     let tokens = tokeniser::tokenise(&src);
     println!("{:#?}", tokens);
-    let program = parser::parse(tokens).expect("Failed to parse");
-    println!("Parsed: {:#?}", program);
-    let func = program.functions[0].compile();
-    println!("Code: {:#?}", func);
+    let module = parser::parse(tokens).expect("Failed to parse");
+    println!("Parsed: {:#?}", module);
+    let program = module.compile();
+    println!("Compiled: {:#?}", program);
+    let mut interpreter = interpreter::Interpreter::new(&program.functions, 0);
 
+    interpreter.run();
+    interpreter.debug_print();
 }
