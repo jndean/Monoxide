@@ -147,7 +147,7 @@ impl<'a> Interpreter<'a> {
 
     pub fn run(&mut self) -> () {
 
-        let instructions = &self.code.fwd;
+        let mut instructions = &self.code.fwd;
 
         'instruction_loop: loop {
 
@@ -170,15 +170,20 @@ impl<'a> Interpreter<'a> {
                 Instruction::BinopSub => self.binop_sub(),
                 Instruction::BinopMul => self.binop_mul(),
                 Instruction::BinopDiv => self.binop_div(),
-                Instruction::Reverse{idx} => self.reverse(*idx),
                 Instruction::Jump{delta} => self.jump(*delta),
                 Instruction::CreateIndex{size} => self.create_index(*size),
                 Instruction::JumpIfTrue{delta} => self.jump_if_true(*delta),
                 Instruction::JumpIfFalse{delta} => self.jump_if_false(*delta),
                 Instruction::Pull => self.pull(),
                 
-                Instruction::Quit => break 'instruction_loop,
                 Instruction::DebugPrint => self.debug_print(),
+                Instruction::Quit => break 'instruction_loop,
+                Instruction::Reverse{idx} => {
+                    self.forwards = !self.forwards;
+                    self.ip = *idx;
+                    instructions = if self.forwards {&self.code.fwd} else {&self.code.bkwd};
+                    continue 'instruction_loop;
+                }
             }
             
             self.ip += 1;
@@ -220,11 +225,6 @@ impl<'a> Interpreter<'a> {
             println!("Jumping because false {:?}", stackobj);
             self.jump(delta);
         }
-    }
-
-    fn reverse(&mut self, idx: usize) {
-        self.forwards = !self.forwards;
-        self.ip = idx;
     }
 
     fn load_const(&mut self, idx: usize) {
