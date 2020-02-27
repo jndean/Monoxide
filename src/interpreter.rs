@@ -3,7 +3,6 @@ extern crate num_rational;
 extern crate num_bigint;
 
 use std::fmt;
-use std::mem::replace;
 use num_traits::cast::ToPrimitive;
 use num_bigint::BigInt;
 
@@ -52,10 +51,12 @@ pub enum Instruction {
     BinopMul,
     BinopDiv,
     Reverse{idx: usize},
-    Jump{delta: isize},  // Instruction Jump //
+    Jump{delta: isize},
     JumpIfTrue{delta: isize},    
     JumpIfFalse{delta: isize},
     CreateIndex{size: usize},
+    Call{idx: usize},
+    Uncall{idx: usize},
     Quit,
     DebugPrint,
 }
@@ -64,7 +65,7 @@ pub enum Instruction {
 pub enum StackObject {
     FreeVar(Variable),
     RegisterVar(usize),
-    IndexVar(Vec<usize>),
+    LookupVar(Vec<usize>),
 }
 
 #[derive(Debug)]
@@ -78,13 +79,6 @@ pub struct Code {
 pub struct Interpreter<'a> {
     functions: &'a Vec<Function>,
     stack: Vec<StackObject>,
-
-    code: &'a Code,
-    ip: usize,
-    forwards: bool,
-    registers: Vec<Option<Variable>>,
-    consts: &'a Vec<Variable>,
-
     scope_stack: Vec<Scope<'a>>
 }
 
@@ -104,6 +98,7 @@ pub struct Function {
     pub code: Code,
     pub consts: Vec<Variable>,
     pub num_registers: usize
+    //pub borrow_params: Vec<String>
 }
 
 #[derive(Debug)]
@@ -131,32 +126,31 @@ macro_rules! binop_method {
 
 impl<'a> Interpreter<'a> {
 
-    pub fn new(functions: &'a Vec<Function>, main_idx: usize) -> Interpreter<'a> {
-        let main = &functions[main_idx];
-        Interpreter {
-            functions,
+    pub fn run(module: &Module) {
+        let main = module.functions.get(0).expect("No main function");
+        let mut interpreter = Interpreter {
+            functions: &module.functions,
             stack: Vec::new(),
-            code: &main.code,
-            ip: 0,
-            forwards: true,
-            registers: vec![None; main.num_registers],
-            consts: &main.consts,
             scope_stack: Vec::new()
-        }
+        };
+        interpreter.call(0, true);
+        interpreter.execute();
+        interpreter.debug_print();
     }
 
-    pub fn run(&mut self) -> () {
+    pub fn execute(&mut self) -> () {
 
-        let mut instructions = &self.code.fwd;
+        let scope = self.scope_stack.last().unwrap();
+        let mut instructions = if scope.forwards {&scope.code.fwd} else {&scope.code.bkwd};
 
         'instruction_loop: loop {
 
-            let instruction = match instructions.get(self.ip) {
+            let instruction = match instructions.get(self.scope_stack.last().unwrap().ip) {
                 Some(inst) => inst,
                 None => break
             };
 
-            println!("IP: {}, {:?}", self.ip, instruction);
+            println!("IP: {}, {:?}", self.scope_stack.last().unwrap().ip, instruction);
 
             match instruction {
                 Instruction::LoadConst{idx} => self.load_const(*idx),
@@ -170,82 +164,90 @@ impl<'a> Interpreter<'a> {
                 Instruction::BinopSub => self.binop_sub(),
                 Instruction::BinopMul => self.binop_mul(),
                 Instruction::BinopDiv => self.binop_div(),
+                Instruction::CreateIndex{size} => self.create_lookup(*size),
                 Instruction::Jump{delta} => self.jump(*delta),
-                Instruction::CreateIndex{size} => self.create_index(*size),
                 Instruction::JumpIfTrue{delta} => self.jump_if_true(*delta),
                 Instruction::JumpIfFalse{delta} => self.jump_if_false(*delta),
                 Instruction::Pull => self.pull(),
-                
-                Instruction::DebugPrint => self.debug_print(),
-                Instruction::Quit => break 'instruction_loop,
+                Instruction::Call{idx} => self.call(*idx, true),
+                Instruction::Uncall{idx} => unimplemented!(),
                 Instruction::Reverse{idx} => {
-                    self.forwards = !self.forwards;
-                    self.ip = *idx;
-                    instructions = if self.forwards {&self.code.fwd} else {&self.code.bkwd};
+                    let scope: &mut Scope = self.scope_stack.last_mut().unwrap();
+                    scope.forwards = !scope.forwards;
+                    scope.ip = *idx;
+                    instructions = if scope.forwards {&scope.code.fwd} else {&scope.code.bkwd};
                     continue 'instruction_loop;
                 }
+                Instruction::Quit => break 'instruction_loop,
+                Instruction::DebugPrint => self.debug_print(),
             }
             
-            self.ip += 1;
+            self.scope_stack.last_mut().unwrap().ip += 1;
         }
     }
 
-    pub fn initialise_function(&mut self, idx: usize, forwards: bool) {
-        let func = &self.functions[idx];
+    pub fn call(&mut self, func_idx: usize, forwards: bool) {
+        let func: &'a Function = self.functions.get(func_idx)
+                                               .expect("Call to undefined function");
         self.scope_stack.push(
             Scope{
-                code  : replace(&mut self.code  , &func.code  ),
-                consts: replace(&mut self.consts, &func.consts),
-                registers: replace(&mut self.registers, vec![None; func.num_registers]),
-                ip: self.ip,
-                forwards: self.forwards,
+                code: &func.code,
+                consts: &func.consts,
+                registers: vec![None; func.num_registers],
+                ip: if forwards {0} else {func.code.bkwd.len() - 1},
+                forwards
             }
         );
-        self.forwards = forwards;
-        self.ip = if forwards {0} else {func.code.bkwd.len() - 1};
     }
 
     #[inline]
     fn jump(&mut self, delta: isize) {
-        self.ip = ((self.ip as isize) + delta) as usize;
+        let scope = self.scope_stack.last_mut().unwrap();
+        scope.ip = ((scope.ip as isize) + delta) as usize;
     }
 
+    #[inline]
     fn jump_if_true(&mut self, delta: isize) {
-        let condition = self.pop();
-        let var = self.stackobj_as_varref(&condition);
-        if var.to_bool() {
+        let stackvar = self.pop();
+        if self.stackobj_as_varref(&stackvar).to_bool() {
             self.jump(delta);
         }
     }
 
+    #[inline]
     fn jump_if_false(&mut self, delta: isize) {
-        let stackobj = self.pop();
-        let condition_var = self.stackobj_as_varref(&stackobj);
-        if !condition_var.to_bool() {
-            println!("Jumping because false {:?}", stackobj);
+        let stackvar = self.pop();
+        if !self.stackobj_as_varref(&stackvar).to_bool() {
             self.jump(delta);
         }
     }
 
+    #[inline]
     fn load_const(&mut self, idx: usize) {
-        self.stack.push(StackObject::FreeVar(self.consts[idx].clone()));
+        let scope = self.scope_stack.last().unwrap();
+        self.stack.push(StackObject::FreeVar(scope.consts[idx].clone()));
     }  
 
+    #[inline]
     fn load_register(&mut self, idx: usize) {
         self.stack.push(StackObject::RegisterVar(idx));
     }
 
+    #[inline]
     fn store_register(&mut self, idx: usize) {
         let stackvar = self.pop();
         let var = self.stackobj_as_var(stackvar);
-        self.registers[idx] = Some(var);
+        let scope = self.scope_stack.last_mut().unwrap();
+        scope.registers[idx] = Some(var);
     }
 
+    #[inline]
     fn free_register(&mut self, idx: usize) {
-        self.registers[idx] = None;
+        let scope = self.scope_stack.last_mut().unwrap();
+        scope.registers[idx] = None;
     }
 
-    fn create_index(&mut self, size: usize) {
+    fn create_lookup(&mut self, size: usize) {
         let mut index: Vec<usize> = Vec::with_capacity(size);
         for _ in 0..size {
             let stackvar = self.pop();
@@ -255,12 +257,19 @@ impl<'a> Interpreter<'a> {
                 panic!("Trying to use non-number as array index");
             };
         };
-        if let StackObject::RegisterVar(register) = self.pop() {
-            index.push(register);
-        } else { unreachable!() };
+        match self.pop() {
+           StackObject::RegisterVar(register) => {
+               index.push(register);
+               index.push(self.scope_stack.len()-1);
+           },
+           StackObject::LookupVar(indices) => {
+               index.extend(indices.into_iter().rev());
+           },
+           _ => unreachable!()
+        };
 
         index.reverse();
-        self.stack.push(StackObject::IndexVar(index));
+        self.stack.push(StackObject::LookupVar(index));
     }
 
     fn load(&mut self) {
@@ -293,11 +302,14 @@ impl<'a> Interpreter<'a> {
 
     fn stackobj_as_varref<'b>(&'b self, var: &'b StackObject) -> &'b Variable {
         match &var {
-            StackObject::RegisterVar(idx) => self.registers[*idx].as_ref().unwrap(),
             StackObject::FreeVar(var) => &var,
-            StackObject::IndexVar(indices) => {
-                let mut var: &Variable = self.registers[indices[0]].as_ref().unwrap();
-                for idx in indices.iter().skip(1) {
+            StackObject::RegisterVar(idx) => {
+                self.scope_stack.last().unwrap().registers[*idx].as_ref().unwrap()
+            },
+            StackObject::LookupVar(indices) => {
+                let scope: &Scope = &self.scope_stack[indices[0]];
+                let mut var: &Variable = scope.registers[indices[1]].as_ref().unwrap();
+                for idx in indices.iter().skip(2) {
                     if let Variable::Array(items) = var {
                         var = &items[*idx];
                     } else {
@@ -312,11 +324,14 @@ impl<'a> Interpreter<'a> {
 
     fn stackobj_as_var(&self, var: StackObject) -> Variable {
         match var {
-            StackObject::RegisterVar(idx) => self.registers[idx].clone().unwrap(),
             StackObject::FreeVar(var) => var,
-            StackObject::IndexVar(indices) => {
-                let mut var: &Variable = self.registers[indices[0]].as_ref().unwrap();
-                for idx in indices.iter().skip(1) {
+            StackObject::RegisterVar(idx) => {
+                self.scope_stack.last().unwrap().registers[idx].as_ref().unwrap().clone()
+            },
+            StackObject::LookupVar(indices) => {
+                let scope: &Scope = &self.scope_stack[indices[0]];
+                let mut var: &Variable = scope.registers[indices[1]].as_ref().unwrap();
+                for idx in indices.iter().skip(2) {
                     if let Variable::Array(items) = var {
                         var = &items[*idx];
                     } else {
@@ -331,10 +346,13 @@ impl<'a> Interpreter<'a> {
 
     fn stackobj_as_mut_varef<'b>(&'b mut self, var: &'b mut StackObject) -> &'b mut Variable {
         match var {
-            StackObject::RegisterVar(idx) => self.registers[*idx].as_mut().unwrap(),
             StackObject::FreeVar(var) => var,
-            StackObject::IndexVar(indices) => {
-                let mut var: &mut Variable = self.registers[indices[0]].as_mut().unwrap();
+            StackObject::RegisterVar(idx) => {
+                self.scope_stack.last_mut().unwrap().registers[*idx].as_mut().unwrap()
+            },
+            StackObject::LookupVar(indices) => {
+                let scope: &mut Scope = &mut self.scope_stack[indices[0]];
+                let mut var: &mut Variable = scope.registers[indices[1]].as_mut().unwrap();
                 for idx in indices.iter().skip(1) {
                     if let Variable::Array(items) = var {
                         var = &mut items[*idx];
@@ -360,7 +378,10 @@ impl<'a> Interpreter<'a> {
     }
 
     pub fn debug_print(&self) {
-        println!("registers: {:#?}\nStack: {:#?}\n----------", self.registers, self.stack);
+        println!(
+            "registers: {:#?}\nStack: {:#?}\n----------", 
+            self.scope_stack.last().unwrap().registers,
+            self.stack);
     }
 }
 

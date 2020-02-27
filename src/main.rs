@@ -21,8 +21,6 @@ fn main() {
     println!("Parsed: {:#?}", module);
     let program = module.compile();
     println!("Compiled: {:#?}", program);
-    let mut interpreter = interpreter::Interpreter::new(&program.functions, 0);
-
-    interpreter.run();
-    interpreter.debug_print();
+    interpreter::Interpreter::run(&program);
+    
 }
