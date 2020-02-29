@@ -21,7 +21,8 @@ impl Variable {
 
 
 #[derive(Debug)]
-pub struct CompilerCtx {
+pub struct CompilerCtx<'a> {
+    func_names: &'a Vec<String>,
     consts: Vec<interpreter::Variable>,
 
     free_registers: Vec<usize>,
@@ -30,9 +31,10 @@ pub struct CompilerCtx {
 }
 
 
-impl CompilerCtx {
-    pub fn new() -> CompilerCtx {
+impl<'a> CompilerCtx<'a> {
+    pub fn new(func_names: &Vec<String>) -> CompilerCtx {
         CompilerCtx{
+            func_names,
             consts: Vec::new(), 
             free_registers: Vec::new(),
             local_variables: HashMap::new(),
@@ -184,6 +186,7 @@ impl ast::ExpressionNode {
             ast::ExpressionNode::Fraction(valbox) => valbox.compile(ctx),
             ast::ExpressionNode::Lookup(valbox) => valbox.compile(ctx),
             ast::ExpressionNode::Binop(valbox) => valbox.compile(ctx),
+            ast::ExpressionNode::ArrayLiteral(valbox) => valbox.compile(ctx)
         }
     }
 }
@@ -222,6 +225,18 @@ impl ast::BinopNode {
         ret.extend(self.lhs.compile(ctx));
         ret.extend(self.rhs.compile(ctx));
         ret.push(self.op.clone());
+        ret
+    }
+}
+
+
+impl ast::ArrayLiteralNode {
+    pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
+        let mut ret = Vec::with_capacity(self.items.len() + 1);
+        for item in self.items.iter().rev() {
+            ret.extend(item.compile(ctx));
+        }
+        ret.push(Instruction::CreateArray{size: self.items.len()});
         ret
     }
 }
@@ -337,8 +352,8 @@ impl ast::CatchNode {
 }
 
 impl ast::FunctionNode {
-    pub fn compile(&self) -> interpreter::Function {
-        let mut ctx = CompilerCtx::new();
+    pub fn compile(&self, func_names: &Vec<String>) -> interpreter::Function {
+        let mut ctx = CompilerCtx::new(func_names);
         let mut code = Code::new();
         for stmt in self.stmts.iter() {
             code.extend(stmt.compile(&mut ctx));
@@ -355,8 +370,10 @@ impl ast::FunctionNode {
 
 impl ast::Module {
     pub fn compile(&self) -> interpreter::Module {
+        let func_names: Vec<String> = 
+            self.functions.iter().map(|f| f.name.clone()).collect();
         interpreter::Module{
-            functions: self.functions.iter().map(|f| f.compile()).collect()
+            functions: self.functions.iter().map(|f| f.compile(&func_names)).collect()
         }
     }
 }

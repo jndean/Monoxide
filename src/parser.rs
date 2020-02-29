@@ -6,7 +6,7 @@ use crate::tokeniser::Token;
 use crate::ast::{
     StatementNode, ExpressionNode, LookupNode, LetUnletNode,
     FractionNode, BinopNode, IfNode, ModopNode, FunctionNode,
-    CatchNode, Module
+    CatchNode, ArrayLiteralNode, Module
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -29,7 +29,8 @@ pub enum Parsed {
     LookupNode(Option<LookupNode>),
     IfNode(Option<IfNode>),
     CatchNode(Option<CatchNode>),
-    FunctionNode(Option<FunctionNode>)
+    FunctionNode(Option<FunctionNode>),
+    ArrayLiteralNode(Option<ArrayLiteralNode>)
 }
 
 
@@ -123,6 +124,27 @@ impl Parser {
         }
     }
 
+    fn join<F, R>(&mut self, item_method: F, seperator: &str) -> Vec<R>
+        where F: Copy + Fn(&mut Parser) -> Option<R>
+    {
+        let mut ret = Vec::new();
+        match item_method(self) {
+            Some(item) => ret.push(item),
+            None => return ret
+        }
+        loop {
+            let pos = self.mark();
+            if !self.expect_literal(seperator) {return ret}
+            match item_method(self) {
+                Some(item) => ret.push(item),
+                None => {
+                    self.reset(pos);
+                    return ret
+                }
+            }
+        }
+    }
+
     memoise!(function_ as function -> FunctionNode);
     pub fn function_(&mut self) -> Option<FunctionNode> {
         let pos = self.mark();
@@ -130,10 +152,10 @@ impl Parser {
         if self.expect_literal("fn") {
         if let Some(name) = self.name() {
         if self.expect_literal("(") {
-        let borrow_params = self.name_list();
+        let borrow_params = self.join(Parser::name, ",");
         if self.expect_literal(")") {
         if self.expect_literal("(") {
-        let steal_params = self.name_list();
+        let steal_params = self.join(Parser::name, ",");
         if self.expect_literal(")") {
         if self.expect_literal("{") {
         if let Some(stmts) = self.statements() {
@@ -141,7 +163,7 @@ impl Parser {
         if self.expect_literal("~") {
         if self.name() == Some(name.clone()) {
         if self.expect_literal("(") {
-        let return_params = self.name_list();
+        let return_params = self.join(Parser::name, ",");
         if self.expect_literal(")") {
             return Some(FunctionNode{
                 name, borrow_params, steal_params, return_params, stmts
@@ -152,35 +174,10 @@ impl Parser {
         None
     }
 
-    pub fn name_list(&mut self) -> Vec<String> {
-        let pos = self.mark();
-        let mut result = Vec::new();
-        if let Some(item) = self.name() {
-            result.push(item);
-            result.extend(self.repeat(Parser::comma_name, true).unwrap());
-            return result;
-        }
-        self.reset(pos);
-        result
-    }
-
-    memoise!(comma_name_ as comma_name -> String);
-    pub fn comma_name_(&mut self) -> Option<String> {
-        let pos = self.mark();
-        if self.expect_literal(",") {
-            if let Some(name) = self.name() {
-                return Some(name);
-            }
-        }
-        self.reset(pos);
-        None
-    }
-
     memoise!(statements_ as statements -> VecStatementNode);
     pub fn statements_(&mut self) -> Option<Vec<StatementNode>> {
         self.repeat(Parser::statement, true)
     }
-
 
     memoise!(statement_ as statement -> StatementNode);
     pub fn statement_(&mut self) -> Option<StatementNode> {
@@ -191,7 +188,6 @@ impl Parser {
         None
     }
 
-    
     memoise!(catch_stmt_ as catch_stmt -> StatementNode);
     pub fn catch_stmt_(&mut self) -> Option<StatementNode> {
         let pos = self.mark();
@@ -209,7 +205,6 @@ impl Parser {
         self.reset(pos);
         None
     }
-
 
     memoise!(if_stmt_ as if_stmt -> StatementNode);
     pub fn if_stmt_(&mut self) -> Option<StatementNode> {
@@ -318,6 +313,9 @@ impl Parser {
             return Some(ExpressionNode::Fraction(Box::new(value)));
         };
 
+        if let Some(x) = self.array_literal() {
+            return Some(ExpressionNode::ArrayLiteral(Box::new(x)));
+        }
 
         if let Some(lhs) = self.expression() {
         if let Some(op)  = self.binop() {
@@ -332,6 +330,19 @@ impl Parser {
         None
     }
 
+    memoise!(array_literal_ as array_literal -> ArrayLiteralNode);
+    pub fn array_literal_(&mut self) -> Option<ArrayLiteralNode> {
+        let pos = self.mark();
+
+        if self.expect_literal("[") {
+        let items = self.join(Parser::expression, ",");
+        if self.expect_literal("]") {
+            return Some(ArrayLiteralNode{items});
+        }}
+
+        self.reset(pos);
+        None
+    }
 
     memoise!(binop_ as binop -> Instruction);
     pub fn binop_(&mut self) -> Option<Instruction> {

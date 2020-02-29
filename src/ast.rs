@@ -8,7 +8,8 @@ use crate::interpreter;
 pub enum ExpressionNode {
     Fraction(Box<FractionNode>),
     Lookup(Box<LookupNode>),
-    Binop(Box<BinopNode>)
+    Binop(Box<BinopNode>),
+    ArrayLiteral(Box<ArrayLiteralNode>)
 }
 
 #[derive(Clone)]
@@ -20,6 +21,11 @@ impl fmt::Debug for FractionNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.value)
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct ArrayLiteralNode {
+    pub items: Vec<ExpressionNode>
 }
 
 #[derive(Clone, Debug)]
