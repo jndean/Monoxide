@@ -3,7 +3,11 @@ extern crate num_rational;
 extern crate num_bigint;
 
 use std::fmt;
+use std::cell::{RefCell, Ref};
+use std::mem::replace;
 use num_traits::cast::ToPrimitive;
+use std::ops::Index;
+use std::rc::Rc;
 use num_bigint::BigInt;
 
 
@@ -13,7 +17,7 @@ pub type Fraction = num_rational::BigRational;
 #[derive(PartialEq, Clone)]
 pub enum Variable {
     Frac(Fraction),
-    Array(Vec<Variable>),
+    Array(Vec<Rc<RefCell<Variable>>>),
 }
 
 impl fmt::Debug for Variable {
@@ -25,12 +29,41 @@ impl fmt::Debug for Variable {
     }
 }
 
-
 impl Variable {
     fn to_bool(&self) -> bool {
         match self {
             Variable::Frac(value) => *value.numer() != BigInt::from(0),
             Variable::Array(items) => items.len() > 0
+        }
+    }
+
+    fn to_usize(&self) -> usize {
+        match self {
+            Variable::Frac(value) => value.to_integer().to_usize().unwrap(),
+            Variable::Array(_) => panic!("Index is not a number")
+        }
+    }
+
+    fn pull(&mut self) -> Rc<RefCell<Variable>> {
+        match self {
+            Variable::Array(items) => {
+                match items.pop() {
+                    Some(item) => item,
+                    None => panic!("Pulling from empty array")
+                }
+            },
+            Variable::Frac(_) => panic!("Pulling from number")
+        }
+    }
+}
+
+impl Index<usize> for Variable {
+    type Output = Rc<RefCell<Variable>>;
+
+    fn index(&self, idx: usize) -> &Self::Output {
+        match self {
+            Variable::Array(items) => &items[idx],
+            Variable::Frac(_) => panic!("Indexing into number")
         }
     }
 }
@@ -42,8 +75,7 @@ pub enum Instruction {
     LoadRegister{register: usize},
     StoreRegister{register: usize},
     FreeRegister{register: usize},
-    Load,
-    LoadNoPop,
+    Subscript{size: usize},
     Store,
     Pull,
     BinopAdd,
@@ -54,7 +86,7 @@ pub enum Instruction {
     Jump{delta: isize},
     JumpIfTrue{delta: isize},    
     JumpIfFalse{delta: isize},
-    CreateIndex{size: usize},
+    CreateArray{size: usize},
     Call{idx: usize},
     Uncall{idx: usize},
     Quit,
@@ -63,9 +95,7 @@ pub enum Instruction {
 
 #[derive(Debug)]
 pub enum StackObject {
-    FreeVar(Variable),
-    RegisterVar(usize),
-    LookupVar(Vec<usize>),
+    Var(Rc<RefCell<Variable>>),
 }
 
 #[derive(Debug)]
@@ -79,7 +109,13 @@ pub struct Code {
 pub struct Interpreter<'a> {
     functions: &'a Vec<Function>,
     stack: Vec<StackObject>,
-    scope_stack: Vec<Scope<'a>>
+    scope_stack: Vec<Scope<'a>>,
+
+    code: &'a Code,
+    ip: usize,
+    forwards: bool,
+    registers: Vec<Option<Rc<RefCell<Variable>>>>,
+    consts: &'a Vec<Variable>
 }
 
 
@@ -88,7 +124,7 @@ pub struct Scope<'a> {
     code: &'a Code,
     ip: usize,
     forwards: bool,
-    registers: Vec<Option<Variable>>,
+    registers: Vec<Option<Rc<RefCell<Variable>>>>,
     consts: &'a Vec<Variable>
 }
 
@@ -110,16 +146,14 @@ pub struct Module {
 macro_rules! binop_method {
     ($name:ident, $op:tt) => {
         fn $name (&mut self) {
-            let rhs = self.pop();
-            let lhs = self.pop();
-            let lhs: &Variable = self.stackobj_as_varref(&lhs);
-            let rhs: &Variable = self.stackobj_as_varref(&rhs);
-            let result = match (lhs, rhs) {
+            let rhs = self.pop_var();
+            let lhs = self.pop_var();
+            let result = match (*lhs.borrow(), *rhs.borrow()) {
                 (Variable::Frac(left), Variable::Frac(right)) => Variable::Frac(left $op right),
                 (Variable::Array(_), Variable::Array(_)) => unimplemented!(),
                 _ => panic!("Adding incompatible types")
             };
-            self.stack.push(StackObject::FreeVar(result));
+            self.stack.push(StackObject::Var(Rc::new(RefCell::new(result))));
         }
     };
 }
@@ -131,7 +165,12 @@ impl<'a> Interpreter<'a> {
         let mut interpreter = Interpreter {
             functions: &module.functions,
             stack: Vec::new(),
-            scope_stack: Vec::new()
+            scope_stack: Vec::new(),
+            code: &main.code,
+            ip: 0,
+            forwards: true,
+            registers: vec![None; main.num_registers],
+            consts: &main.consts
         };
         interpreter.call(0, true);
         interpreter.execute();
@@ -157,14 +196,13 @@ impl<'a> Interpreter<'a> {
                 Instruction::LoadRegister{register} => self.load_register(*register),
                 Instruction::StoreRegister{register} => self.store_register(*register),
                 Instruction::FreeRegister{register} => self.free_register(*register),
-                Instruction::Load => self.load(),
-                Instruction::LoadNoPop => self.load_nopop(),
                 Instruction::Store => self.store(),
+                Instruction::Subscript{size} => self.subscript(*size),
                 Instruction::BinopAdd => self.binop_add(),
                 Instruction::BinopSub => self.binop_sub(),
                 Instruction::BinopMul => self.binop_mul(),
                 Instruction::BinopDiv => self.binop_div(),
-                Instruction::CreateIndex{size} => self.create_lookup(*size),
+                Instruction::CreateArray{size} => self.create_array(*size),
                 Instruction::Jump{delta} => self.jump(*delta),
                 Instruction::JumpIfTrue{delta} => self.jump_if_true(*delta),
                 Instruction::JumpIfFalse{delta} => self.jump_if_false(*delta),
@@ -191,11 +229,11 @@ impl<'a> Interpreter<'a> {
                                                .expect("Call to undefined function");
         self.scope_stack.push(
             Scope{
-                code: &func.code,
-                consts: &func.consts,
-                registers: vec![None; func.num_registers],
-                ip: if forwards {0} else {func.code.bkwd.len() - 1},
-                forwards
+                code      : replace(&mut self.code     , &func.code),
+                consts    : replace(&mut self.consts   , &func.consts),
+                registers : replace(&mut self.registers, vec![None; func.num_registers]),
+                ip        : replace(&mut self.ip       , 0),
+                forwards  : replace(&mut self.forwards , forwards)
             }
         );
     }
@@ -208,87 +246,64 @@ impl<'a> Interpreter<'a> {
 
     #[inline]
     fn jump_if_true(&mut self, delta: isize) {
-        let stackvar = self.pop();
-        if self.stackobj_as_varref(&stackvar).to_bool() {
+        if self.pop_var().borrow().to_bool() {
             self.jump(delta);
         }
     }
 
     #[inline]
     fn jump_if_false(&mut self, delta: isize) {
-        let stackvar = self.pop();
-        if !self.stackobj_as_varref(&stackvar).to_bool() {
+        if !self.pop_var().borrow().to_bool() {
             self.jump(delta);
         }
     }
 
     #[inline]
     fn load_const(&mut self, idx: usize) {
-        let scope = self.scope_stack.last().unwrap();
-        self.stack.push(StackObject::FreeVar(scope.consts[idx].clone()));
+        self.stack.push(StackObject::Var(Rc::new(RefCell::new(
+            self.consts[idx].clone()
+        ))));
     }  
 
     #[inline]
     fn load_register(&mut self, idx: usize) {
-        self.stack.push(StackObject::RegisterVar(idx));
+        let new_var_ref = Rc::clone(&self.registers[idx].unwrap());
+        self.stack.push(StackObject::Var(new_var_ref));
     }
 
     #[inline]
     fn store_register(&mut self, idx: usize) {
-        let stackvar = self.pop();
-        let var = self.stackobj_as_var(stackvar);
-        let scope = self.scope_stack.last_mut().unwrap();
-        scope.registers[idx] = Some(var);
+        self.registers[idx] = Some(self.pop_var());
     }
 
     #[inline]
     fn free_register(&mut self, idx: usize) {
-        let scope = self.scope_stack.last_mut().unwrap();
-        scope.registers[idx] = None;
+        self.registers[idx] = None;
     }
 
-    fn create_lookup(&mut self, size: usize) {
-        let mut index: Vec<usize> = Vec::with_capacity(size);
+    pub fn create_array(&mut self, size: usize) {
+        let mut items = Vec::with_capacity(size);
         for _ in 0..size {
-            let stackvar = self.pop();
-            if let Variable::Frac(value) = self.stackobj_as_varref(&stackvar) {
-                index.push(value.to_integer().to_usize().unwrap());
-            } else {
-                panic!("Trying to use non-number as array index");
-            };
-        };
-        match self.pop() {
-           StackObject::RegisterVar(register) => {
-               index.push(register);
-               index.push(self.scope_stack.len()-1);
-           },
-           StackObject::LookupVar(indices) => {
-               index.extend(indices.into_iter().rev());
-           },
-           _ => unreachable!()
-        };
-
-        index.reverse();
-        self.stack.push(StackObject::LookupVar(index));
+            items.push(self.pop_var());
+        }
+        self.stack.push(StackObject::Var(Rc::new(RefCell::new(
+            Variable::Array(items)
+        ))));
     }
 
-    fn load(&mut self) {
-        let stackvar = self.pop();
-        let var = self.stackobj_as_var(stackvar);
-        self.stack.push(StackObject::FreeVar(var));
-    }
-
-    fn load_nopop(&mut self) {
-        let stack_index = &self.stack[self.stack.len()-1];
-        let var = self.stackobj_as_varref(&stack_index).clone();
-        self.stack.push(StackObject::FreeVar(var));
+    fn subscript(&mut self, size: usize) {
+        let mut var_ref = self.pop_var();
+        for _ in 0..size {
+            let index = self.pop_var().borrow().to_usize();
+            var_ref = Rc::clone(&Ref::map(var_ref.borrow(), |var| &var[index]));
+        }
+        self.stack.push(StackObject::Var(var_ref));
     }
 
     fn store(&mut self) {
-        let stackvar = self.pop();
-        let value = self.stackobj_as_var(stackvar);
-        let mut destination = self.pop();
-        *self.stackobj_as_mut_varef(&mut destination) = value;
+        let value = self.pop_var().borrow().clone();
+        let destination = self.pop_var().borrow_mut();
+        *destination = value;
     }
 
     binop_method!(binop_add, +);
@@ -296,91 +311,29 @@ impl<'a> Interpreter<'a> {
     binop_method!(binop_mul, *);
     binop_method!(binop_div, /);
     
+    #[inline]
     fn pop(&mut self) -> StackObject {
         self.stack.pop().expect("Popped off empty stack")
     }
 
-    fn stackobj_as_varref<'b>(&'b self, var: &'b StackObject) -> &'b Variable {
-        match &var {
-            StackObject::FreeVar(var) => &var,
-            StackObject::RegisterVar(idx) => {
-                self.scope_stack.last().unwrap().registers[*idx].as_ref().unwrap()
-            },
-            StackObject::LookupVar(indices) => {
-                let scope: &Scope = &self.scope_stack[indices[0]];
-                let mut var: &Variable = scope.registers[indices[1]].as_ref().unwrap();
-                for idx in indices.iter().skip(2) {
-                    if let Variable::Array(items) = var {
-                        var = &items[*idx];
-                    } else {
-                        panic!("Indexing into non-array");
-                    }
-                };
-                var
-            },
+    #[inline]
+    fn pop_var(&mut self) -> Rc<RefCell<Variable>> {
+        match self.pop() {
+            StackObject::Var(x) => x,
             _ => panic!("Non-variable found on the stack")
         }
     }
 
-    fn stackobj_as_var(&self, var: StackObject) -> Variable {
-        match var {
-            StackObject::FreeVar(var) => var,
-            StackObject::RegisterVar(idx) => {
-                self.scope_stack.last().unwrap().registers[idx].as_ref().unwrap().clone()
-            },
-            StackObject::LookupVar(indices) => {
-                let scope: &Scope = &self.scope_stack[indices[0]];
-                let mut var: &Variable = scope.registers[indices[1]].as_ref().unwrap();
-                for idx in indices.iter().skip(2) {
-                    if let Variable::Array(items) = var {
-                        var = &items[*idx];
-                    } else {
-                        panic!("Indexing into non-array");
-                    }
-                };
-                var.clone()
-            },
-            _ => panic!("Non-variable found on the stack")
-        }
-    }
-
-    fn stackobj_as_mut_varef<'b>(&'b mut self, var: &'b mut StackObject) -> &'b mut Variable {
-        match var {
-            StackObject::FreeVar(var) => var,
-            StackObject::RegisterVar(idx) => {
-                self.scope_stack.last_mut().unwrap().registers[*idx].as_mut().unwrap()
-            },
-            StackObject::LookupVar(indices) => {
-                let scope: &mut Scope = &mut self.scope_stack[indices[0]];
-                let mut var: &mut Variable = scope.registers[indices[1]].as_mut().unwrap();
-                for idx in indices.iter().skip(1) {
-                    if let Variable::Array(items) = var {
-                        var = &mut items[*idx];
-                    } else {
-                        panic!("Indexing into non-array");
-                    }
-                };
-                var
-            },
-            _ => panic!("Non-variable found on the stack")
-        }
-    }
-
+    #[inline]
     fn pull(&mut self) {
-        let mut stackvar = self.pop();
-        let var: &mut Variable = self.stackobj_as_mut_varef(&mut stackvar);
-        let value = if let Variable::Array(items) = var {
-                items.pop().expect("Pulling off empty array")
-        } else {
-            panic!("Trying to pull from a non-array")
-        };
-        self.stack.push(StackObject::FreeVar(value));
+        let var = self.pop_var().borrow_mut().pull();
+        self.stack.push(StackObject::Var(var));
     }
 
     pub fn debug_print(&self) {
         println!(
             "registers: {:#?}\nStack: {:#?}\n----------", 
-            self.scope_stack.last().unwrap().registers,
+            self.registers,
             self.stack);
     }
 }
