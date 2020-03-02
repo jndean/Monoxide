@@ -24,7 +24,7 @@ impl fmt::Debug for Variable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Variable::Frac(val) => write!(f, "{}", val),
-            Variable::Array(vec) => write!(f, "Array({:?})", vec)
+            Variable::Array(vec) => write!(f, "Array({:#?})", vec)
         }
     }
 }
@@ -301,15 +301,15 @@ impl<'a> Interpreter<'a> {
         let mut var_ref = self.pop_var();
         for _ in 0..size {
             let index = self.pop_var().borrow().to_usize();
-            var_ref = Rc::clone(&Ref::map(var_ref.borrow(), |var| &var[index]));
+            let new_ref = Rc::clone(&Ref::map(var_ref.borrow(), |var| &var[index]));
+            var_ref = new_ref;
         }
         self.stack.push(StackObject::Var(var_ref));
     }
 
     fn store(&mut self) {
         let value = self.pop_var().borrow().clone();
-        let destination = self.pop_var().borrow_mut();
-        *destination = value;
+        *self.pop_var().borrow_mut() = value;
     }
 
     fn duplicate_top(&mut self) {

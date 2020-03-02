@@ -1,5 +1,5 @@
 
 fn main(argv)(X, w, h) {
-    x := [1,2,3/4];
-    
+    x := 8;
+    x -= 6;
 } ~main(argv)
