@@ -89,6 +89,7 @@ pub enum Instruction {
     CreateArray{size: usize},
     Call{idx: usize},
     Uncall{idx: usize},
+    Duplicate,
     Quit,
     DebugPrint,
 }
@@ -148,9 +149,13 @@ macro_rules! binop_method {
         fn $name (&mut self) {
             let rhs = self.pop_var();
             let lhs = self.pop_var();
-            let result = match (*lhs.borrow(), *rhs.borrow()) {
-                (Variable::Frac(left), Variable::Frac(right)) => Variable::Frac(left $op right),
-                (Variable::Array(_), Variable::Array(_)) => unimplemented!(),
+            let result = match (&*lhs.borrow(), &*rhs.borrow()) {
+                (Variable::Frac(left), Variable::Frac(right)) => {
+                    Variable::Frac(left $op right)
+                },
+                (Variable::Array(_), Variable::Array(_)) => {
+                    unimplemented!()
+                },
                 _ => panic!("Adding incompatible types")
             };
             self.stack.push(StackObject::Var(Rc::new(RefCell::new(result))));
@@ -198,6 +203,7 @@ impl<'a> Interpreter<'a> {
                 Instruction::FreeRegister{register} => self.free_register(*register),
                 Instruction::Store => self.store(),
                 Instruction::Subscript{size} => self.subscript(*size),
+                Instruction::Duplicate => self.duplicate_top(),
                 Instruction::BinopAdd => self.binop_add(),
                 Instruction::BinopSub => self.binop_sub(),
                 Instruction::BinopMul => self.binop_mul(),
@@ -267,7 +273,7 @@ impl<'a> Interpreter<'a> {
 
     #[inline]
     fn load_register(&mut self, idx: usize) {
-        let new_var_ref = Rc::clone(&self.registers[idx].unwrap());
+        let new_var_ref = Rc::clone(self.registers[idx].as_ref().unwrap());
         self.stack.push(StackObject::Var(new_var_ref));
     }
 
@@ -304,6 +310,14 @@ impl<'a> Interpreter<'a> {
         let value = self.pop_var().borrow().clone();
         let destination = self.pop_var().borrow_mut();
         *destination = value;
+    }
+
+    fn duplicate_top(&mut self) {
+        let new = match self.stack.last().unwrap() {
+            StackObject::Var(cell) => StackObject::Var(Rc::clone(cell)),
+            _ => panic!("Trying to duplicate non-variable")
+        };
+        self.stack.push(new);
     }
 
     binop_method!(binop_add, +);

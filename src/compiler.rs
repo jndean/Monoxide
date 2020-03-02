@@ -129,11 +129,11 @@ impl Code {
         self.bkwd.push(x);
     }
 
-    pub fn extend_fwd(&mut self, instructions: Vec<Instruction>) {
-        self.fwd.extend(instructions);
+    pub fn append_fwd(&mut self, mut instructions: Vec<Instruction>) {
+        self.fwd.append(&mut instructions);
     }
     
-    pub fn extend_bkwd(&mut self, instructions: Vec<Instruction>) {
+    pub fn append_bkwd(&mut self, instructions: Vec<Instruction>) {
         self.bkwd.extend(instructions.into_iter().rev());
     }
 
@@ -204,15 +204,13 @@ impl ast::FractionNode {
 impl ast::LookupNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
         let register = ctx.lookup_local(&self.name);
-        let mut instructions = vec![Instruction::LoadRegister{register}];
-        
-        // Handle array lookups //
+        let mut instructions = Vec::with_capacity(self.indices.len()+1);        
+        for index in self.indices.iter().rev() {
+            instructions.extend(index.compile(ctx));
+        }
+        instructions.push(Instruction::LoadRegister{register});
         if !self.indices.is_empty() {
-            for index in self.indices.iter() {
-                instructions.extend(index.compile(ctx));
-            }
-            instructions.push(Instruction::CreateIndex{size: self.indices.len()});
-            instructions.push(Instruction::Load);
+            instructions.push(Instruction::Subscript{size: self.indices.len()});
         }
         instructions
     }
@@ -261,10 +259,10 @@ impl ast::LetUnletNode {
             let register = ctx.free_local(&self.name);
             code.push_fwd(Instruction::FreeRegister{register});
             code.push_bkwd(Instruction::StoreRegister{register});
-            code.extend_bkwd(self.rhs.compile(ctx));
+            code.append_bkwd(self.rhs.compile(ctx));
         } else {
             let register = ctx.create_local(&self.name);
-            code.extend_fwd(self.rhs.compile(ctx));
+            code.append_fwd(self.rhs.compile(ctx));
             code.push_fwd(Instruction::StoreRegister{register});
             code.push_bkwd(Instruction::FreeRegister{register});
         }
@@ -288,17 +286,17 @@ impl ast::ModopNode {
         let capacity = lookup.len() + rhs.len() + 3;
         let mut code = Code::with_capacity(capacity, capacity);
 
-        code.extend_fwd(lookup.clone());
-        code.push_fwd(Instruction::LoadNoPop);
-        code.extend_fwd(rhs.clone());
+        code.append_fwd(lookup.clone());
+        code.push_fwd(Instruction::Duplicate);
+        code.append_fwd(rhs.clone());
         code.push_fwd(self.op.clone());
         code.push_fwd(Instruction::Store);
 
         code.push_bkwd(Instruction::Store);
         code.push_bkwd(bkwd_op);
-        code.extend_bkwd(rhs);
-        code.push_bkwd(Instruction::LoadNoPop);
-        code.extend_bkwd(lookup);
+        code.append_bkwd(rhs);
+        code.push_bkwd(Instruction::Duplicate);
+        code.append_bkwd(lookup);
         
         code
     }
@@ -324,7 +322,7 @@ impl ast::IfNode {
             if_block.fwd_len() + else_block.fwd_len() + fwd_expr.len() + 2, 
             if_block.bkwd_len() + else_block.bkwd_len() + bkwd_expr.len() + 2);
         
-        code.extend_fwd(fwd_expr);
+        code.append_fwd(fwd_expr);
         code.push_fwd(Instruction::JumpIfFalse{
             delta: (if_block.fwd_len() + 1) as isize
         });
@@ -335,7 +333,7 @@ impl ast::IfNode {
         code.push_bkwd(Instruction::Jump{delta: if_bkwd_len});
         code.extend(else_block);
         code.push_bkwd(Instruction::JumpIfTrue{delta: else_bkwd_len + 1});
-        code.extend_bkwd(bkwd_expr);
+        code.append_bkwd(bkwd_expr);
 
         code
     }
@@ -344,7 +342,7 @@ impl ast::IfNode {
 impl ast::CatchNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
         let mut code = Code::new();
-        code.extend_fwd(self.expr.compile(ctx));
+        code.append_fwd(self.expr.compile(ctx));
         code.push_fwd(Instruction::JumpIfFalse{delta: 1});
         code.link_fwd2bkwd();
         code
