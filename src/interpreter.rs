@@ -44,6 +44,19 @@ impl Variable {
         }
     }
 
+    fn deep_copy(&self) -> Self {
+        match self {
+            Variable::Frac(value) => Variable::Frac(value.clone()),
+            Variable::Array(items) => {
+                Variable::Array(
+                    items.iter().map(
+                        |item| Rc::new(RefCell::new(item.borrow().deep_copy()))
+                    ).collect()
+                )
+            }
+        }
+    }
+
     fn pull(&mut self) -> Rc<RefCell<Variable>> {
         match self {
             Variable::Array(items) => {
@@ -290,7 +303,12 @@ impl<'a> Interpreter<'a> {
     pub fn create_array(&mut self, size: usize) {
         let mut items = Vec::with_capacity(size);
         for _ in 0..size {
-            items.push(self.pop_var());
+            let mut item = self.pop_var();
+            if Rc::strong_count(&item) > 1 {
+                let val = item.borrow().deep_copy();
+                item = Rc::new(RefCell::new(val));
+            };
+            items.push(item);
         }
         self.stack.push(StackObject::Var(Rc::new(RefCell::new(
             Variable::Array(items)
