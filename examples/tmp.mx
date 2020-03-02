@@ -1,5 +1,9 @@
 
 fn main(argv)(X, w, h) {
     x := 8;
-    x -= 6;
+    if (x) {
+        x -= 1;
+    } else {
+        x += 4;
+    } ~if (1);
 } ~main(argv)

@@ -33,11 +33,8 @@ pub enum Parsed {
     ArrayLiteralNode(Option<ArrayLiteralNode>)
 }
 
-
-#[allow(unused_macros)]
 macro_rules! memoise {
     ($raw_func:ident as $out_func:ident -> $ret_type:ident) => {
-
         fn $out_func(&mut self) -> Option<$ret_type> {
             let pos = self.mark();
             let key = (pos, String::from(stringify!($raw_func)));
@@ -52,15 +49,50 @@ macro_rules! memoise {
                 },
                 None => {
                     let result = self.$raw_func();
-                    self.memo.insert(
-                        key, 
-                        (self.mark(), Parsed::$ret_type(result.clone()))
-                    );
+                    let new_pos = self.mark();
+                    let memo = Parsed::$ret_type(result.clone());
+                    self.memo.insert(key, (new_pos, memo));
                     result
                 }
             }
         }
+    }
+}
 
+#[allow(unused_macros)]
+macro_rules! memoise_recursive {
+    ($raw_func:ident as $out_func:ident -> $ret_type:ident) => {
+        fn $out_func(&mut self) -> Option<$ret_type> {
+            let pos = self.mark();
+            let key = (pos, String::from(stringify!($raw_func)));
+            match self.memo.get(&key) {
+                Some((end, result)) => {
+                    let end = *end;
+                    let result = (*result).clone();
+                    if let Parsed::$ret_type(ret) = result {
+                        self.reset(end);
+                        return ret;
+                    } else {unreachable!()}
+                },
+                None => {
+                    let (mut lastres, mut lastpos) = (None, pos);
+                    let memo = Parsed::$ret_type(lastres.clone());
+                    self.memo.insert(key.clone(), (lastpos, memo));
+                    loop {
+                        self.reset(pos);
+                        let result = self.$raw_func();
+                        let endpos = self.mark();
+                        if endpos <= lastpos {break};
+                        lastres = result;
+                        lastpos = endpos;
+                        let memo = Parsed::$ret_type(lastres.clone());
+                        self.memo.insert(key.clone(), (lastpos, memo));
+                    }
+                    self.reset(lastpos);
+                    return lastres;
+                }
+            }
+        }
     }
 }
 
@@ -251,8 +283,8 @@ impl Parser {
         if self.expect_literal("}") {
             return Some(stmts);
         }}}};
-
         self.reset(pos);
+        
         None
     }
 
@@ -303,20 +335,20 @@ impl Parser {
     }
 
 
-    memoise!(expression_ as expression -> ExpressionNode);
+    memoise_recursive!(expression_ as expression -> ExpressionNode);
     pub fn expression_(&mut self) -> Option<ExpressionNode> {
         let pos = self.mark();
-
+        
         if let Some(token) = self.expect_type("NUMBER") {
             let value = Fraction::from_str(&token.string_[..]).unwrap();
             let value = FractionNode{value};
             return Some(ExpressionNode::Fraction(Box::new(value)));
         };
-
+        
         if let Some(x) = self.array_literal() {
             return Some(ExpressionNode::ArrayLiteral(Box::new(x)));
         }
-
+        
         if let Some(lhs) = self.expression() {
         if let Some(op)  = self.binop() {
         if let Some(rhs) = self.expression() {
@@ -325,8 +357,12 @@ impl Parser {
                     BinopNode{lhs, rhs, op}
             )));
         }}};
-
         self.reset(pos);
+
+        if let Some(lookup) = self.lookup() {
+            return Some(ExpressionNode::Lookup(Box::new(lookup)));
+        };
+
         None
     }
 
