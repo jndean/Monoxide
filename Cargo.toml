@@ -1,5 +1,5 @@
 [package]
-name = "monorail"
+name = "monoxide"
 version = "0.1.0"
 authors = ["jndean <josefdean@blueyonder.co.uk>"]
 edition = "2018"

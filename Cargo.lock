@@ -24,7 +24,7 @@ version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "monorail"
+name = "monoxide"
 version = "0.1.0"
 dependencies = [
  "num-bigint 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
