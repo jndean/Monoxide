@@ -7,10 +7,12 @@ use interpreter::Instruction;
 
 
 #[derive(Debug)]
-struct Variable {
-    pub register: usize
+pub enum Variable {
+    Reg(usize, Vec<String>), // A variable that owns its own register
+    Ref(String)  // A variable that is just a symbolic reference to another
 }
 
+/*
 impl Variable {
     fn new(register: usize) -> Variable {
         Variable{
@@ -18,7 +20,7 @@ impl Variable {
         }
     }
 }
-
+*/
 
 #[derive(Debug)]
 pub struct CompilerCtx<'a> {
@@ -50,10 +52,11 @@ impl<'a> CompilerCtx<'a> {
         self.consts.len() - 1
     }
 
-    fn lookup_local(&mut self, name: &str) -> usize {
+    fn lookup_local(&self, name: &str) -> usize {
         match self.local_variables.get(name) {
-            Some(var) => var.register,
-            None => panic!("Accessing non-existant local")
+            Some(Variable::Reg(register, _)) => *register,
+            Some(Variable::Ref(name)) => self.lookup_local(name),
+            None => panic!("Use of non-existant variable") 
         }
     }
 
@@ -70,22 +73,30 @@ impl<'a> CompilerCtx<'a> {
         };
         self.local_variables.insert(
             name.to_string(),
-            Variable::new(register)
+            Variable::Reg(register, Vec::new())
         );
         register
     }
 
     fn free_local(&mut self, name: &str) -> usize {
-        match self.local_variables.remove(name) {
-            Some(var) => {
-                self.free_registers.push(var.register);
-                var.register
-            },
+        let true_name = match self.local_variables.get(name) {
+            Some(Variable::Reg(..)) => name.to_string(),
+            Some(Variable::Ref(other)) => other.clone(),
             None => panic!("Freeing non-existant local")
+        };
+
+        match self.local_variables.remove(&true_name) {
+            Some(Variable::Reg(register, references)) => {
+                for reference in references.iter() {
+                    self.local_variables.remove(reference);
+                }
+                register
+            },
+            _ => unreachable!()
         }
     }
-
 }
+
 
 #[derive(Default, Debug)]
 pub struct Code {

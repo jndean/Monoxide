@@ -21,6 +21,11 @@ fn main(argv)()
         println("Sum:", sum);
     }
 
+    X = [1,2,3];
+    for (x in X) {
+        
+    }
+
 } ~main();
 
 

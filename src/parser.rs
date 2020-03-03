@@ -284,7 +284,7 @@ impl Parser {
             return Some(stmts);
         }}}};
         self.reset(pos);
-        
+
         None
     }
 
@@ -329,8 +329,18 @@ impl Parser {
                 LetUnletNode{name, rhs, is_unlet: true}
             )));
         }}}};
-
         self.reset(pos);
+        /*
+        if let Some(name) = self.name() {
+        if self.expect_literal("&=") {
+        if let Some(rhs) = self.lookup() {
+        if self.expect_literal(";") {
+            return Some(StatementNode::LetUnlet(Box::new(
+                LetUnletNode{name, rhs, is_unlet: true}
+            )));
+        }}}};
+        self.reset(pos);
+        */
         None
     }
 

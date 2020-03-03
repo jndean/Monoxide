@@ -56,18 +56,6 @@ impl Variable {
             }
         }
     }
-
-    fn pull(&mut self) -> Rc<RefCell<Variable>> {
-        match self {
-            Variable::Array(items) => {
-                match items.pop() {
-                    Some(item) => item,
-                    None => panic!("Pulling from empty array")
-                }
-            },
-            Variable::Frac(_) => panic!("Pulling from number")
-        }
-    }
 }
 
 impl Index<usize> for Variable {
@@ -330,6 +318,10 @@ impl<'a> Interpreter<'a> {
         *self.pop_var().borrow_mut() = value;
     }
 
+    fn set(&mut self) {
+        let value = self.pop_var().borrow().clone();
+    }
+
     fn duplicate_top(&mut self) {
         let new = match self.stack.last().unwrap() {
             StackObject::Var(cell) => StackObject::Var(Rc::clone(cell)),
@@ -358,8 +350,14 @@ impl<'a> Interpreter<'a> {
 
     #[inline]
     fn pull(&mut self) {
-        let var = self.pop_var().borrow_mut().pull();
-        self.stack.push(StackObject::Var(var));
+        let new_var = match &mut *self.pop_var().borrow_mut() {
+            Variable::Array(items) => match items.pop() {
+                Some(item) => item,
+                None => panic!("Pulling from empty array")
+            },
+            Variable::Frac(_) => panic!("Pulling from number")
+        };
+        self.stack.push(StackObject::Var(new_var));
     }
 
     pub fn debug_print(&self) {
