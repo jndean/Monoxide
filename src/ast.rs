@@ -45,6 +45,7 @@ pub struct BinopNode {
 #[derive(Clone, Debug)]
 pub enum StatementNode {
     LetUnlet(Box<LetUnletNode>),
+    LetUnletRef(Box<LetUnletRefNode>),
     If(Box<IfNode>),
     Modop(Box<ModopNode>),
     Catch(Box<CatchNode>)
@@ -55,6 +56,13 @@ pub struct LetUnletNode {
     pub is_unlet: bool,
     pub name: String,
     pub rhs: ExpressionNode
+}
+
+#[derive(Clone, Debug)]
+pub struct LetUnletRefNode {
+    pub is_unlet: bool,
+    pub name: String,
+    pub rhs: LookupNode
 }
 
 #[derive(Clone, Debug)]

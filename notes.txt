@@ -1,0 +1,147 @@
+
+#################### Let / Unlet ####################
+
+GRAMMAR
+name ':=' expression ';'
+
+---------- FORWARDS ----------
+
+EXAMPLE
+X := 1;
+
+REQUIREMENTS
+- Name X doesn't exist
+
+ACTIONS
+- Creates a new exterior reference to a new var containing
+  a deep copy of the RHS
+
+---------- BACKWARDS ----------
+
+EXAMPLE
+X =: 1;
+
+REQUIREMENTS
+- X is the only reference of any kind to the var
+
+ACTIONS
+- Removes name X and frees the var
+
+
+#################### Ref/ UnRef ####################
+
+GRAMMAR
+name ':=' '&' lookup ';'
+
+---------- FORWARDS ----------
+
+EXAMPLES
+Y := &X;
+Y := &X[0];
+
+REQUIREMENTS
+- Name X exists
+- Name Y doesn't exist
+
+ACTIONS
+- Creates a new reference to the var behind X
+- If the lookup has indices the ref type is interior.
+- Otherwise it is the same ref type as X.
+
+---------- BACKWARDS ----------
+
+EXAMPLE
+Y =: &X;
+Y =: &X[0];
+
+REQUIREMENTS
+- Y and X are the same ref type and the same var
+- Y and X are different names
+
+ACTIONS
+- Frees the name Y and removes it from var
+
+
+#################### Push ####################
+
+GRAMMAR
+name '=>' lookup ';'
+name '=>' lookup ';'
+
+---------- FORWARDS ----------
+
+EXAMPLE
+X => Y;
+
+REQUIREMENTS
+- X and Y are different vars
+- X is not an interior ref
+- Pull requirements?
+
+ACTIONS
+- X var is pushed onto Y var
+- Name X is freed
+- All other exerior refs to X become interior refs to Y?
+
+---------- BACKWARDS ----------
+
+EXAMPLE
+X <= Y;
+
+REQUIREMENTS
+- Name X is free
+- Y has no _other_ interior references
+
+ACTIONS
+- Pops a var off Y, puts it under new exterior ref X
+
+
+
+
+
+fn find(A: grid, a: row)() {
+   idx := -1;
+   for (r in [0 : #grid]) {
+      if (idx == -1 && grid[r] == row) {
+         idx += r + 1;
+      } ~if(r == idx);
+   }
+} ~find(idx);
+
+
+Y := [];
+X := 1;
+doit(X, Y);
+X =: &Y[0];
+Y =: [1];
+
+fn doit(X, Y)() {
+   X2 := &X;
+   X2 => Y;
+} ~doit();
+
+Y := [1];
+X := &Y[0];
+~doit(X, Y)
+X =: 1;
+Y =: [];
+
+
+
+Function argument annotations:
+
+# Default # 
+fn F(X)
+Caller may pass anything, so callee may not rearrange X at all.
+
+# Unspecified #
+fn F(X :_)
+Caller only pass in singly-owned vars, so callee may do anything.
+
+# Linked #
+fn F(X :A, x:a)()
+fn F(X :A) {
+   x += 1;
+} ~F();
+
+Caller may pass in 

@@ -6,7 +6,7 @@ use crate::tokeniser::Token;
 use crate::ast::{
     StatementNode, ExpressionNode, LookupNode, LetUnletNode,
     FractionNode, BinopNode, IfNode, ModopNode, FunctionNode,
-    CatchNode, ArrayLiteralNode, Module
+    CatchNode, ArrayLiteralNode, Module, LetUnletRefNode
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -306,6 +306,35 @@ impl Parser {
         None
     }
 
+    memoise!(letunletref_stmt_ as letunletref_stmt -> StatementNode);
+    pub fn letunletref_stmt_(&mut self) -> Option<StatementNode> {
+        let pos = self.mark();
+
+        if let Some(name) = self.name() {
+        if self.expect_literal(":=") {
+        if self.expect_literal("&") {
+        if let Some(rhs) = self.lookup() {
+        if self.expect_literal(";") {
+            return Some(StatementNode::LetUnletRef(Box::new(
+                LetUnletRefNode{name, rhs, is_unlet: false}
+            )));
+        }}}}};
+        self.reset(pos);
+
+        if let Some(name) = self.name() {
+        if self.expect_literal("=:") {
+        if self.expect_literal("&") {
+        if let Some(rhs) = self.lookup() {
+        if self.expect_literal(";") {
+            return Some(StatementNode::LetUnletRef(Box::new(
+                LetUnletRefNode{name, rhs, is_unlet: true}
+            )));
+        }}}}};
+        self.reset(pos);
+
+        None
+    }
+
 
     memoise!(letunlet_stmt_ as letunlet_stmt -> StatementNode);
     pub fn letunlet_stmt_(&mut self) -> Option<StatementNode> {
@@ -330,17 +359,7 @@ impl Parser {
             )));
         }}}};
         self.reset(pos);
-        /*
-        if let Some(name) = self.name() {
-        if self.expect_literal("&=") {
-        if let Some(rhs) = self.lookup() {
-        if self.expect_literal(";") {
-            return Some(StatementNode::LetUnlet(Box::new(
-                LetUnletNode{name, rhs, is_unlet: true}
-            )));
-        }}}};
-        self.reset(pos);
-        */
+     
         None
     }
 

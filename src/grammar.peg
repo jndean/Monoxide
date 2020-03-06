@@ -19,6 +19,9 @@ unlet_stmt: name '=:' expression ;
 
 let_stmt: name ':=' expression ;
 
+letref_stmt: name ':=' '&' lookup ;
+
+unletref_stmt: name '=:' '&' lookup ;
 
 expression: expression binop expression
           | '(' expression ')'
