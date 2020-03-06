@@ -1,5 +1,7 @@
 
-use std::collections::HashMap;
+use std::cell::RefCell;
+use std::collections::{HashSet, HashMap};
+use std::rc::Rc;
 
 use crate::ast;
 use crate::interpreter;
@@ -12,15 +14,34 @@ pub enum Variable {
     Ref(String)  // A variable that is just a symbolic reference to another
 }
 
-/*
-impl Variable {
-    fn new(register: usize) -> Variable {
-        Variable{
-            register
+#[derive(Debug)]
+pub struct Reference {
+    is_interior: bool,
+    register: usize,
+    var: Rc<NewVariable>
+}
+
+#[derive(Debug)]
+pub struct NewVariable {
+    exteriors: RefCell<HashSet<String>>,
+    interiors: RefCell<HashSet<String>>
+}
+
+impl Reference {
+    fn new(name: String, register: usize, is_interior: bool) -> Reference {
+        let mut exteriors = HashSet::new();
+        exteriors.insert(name);
+        Reference {
+            is_interior,
+            register,
+            var: Rc::new(NewVariable{
+                exteriors: RefCell::new(exteriors),
+                interiors: RefCell::new(HashSet::new())
+            })
         }
     }
 }
-*/
+
 
 #[derive(Debug)]
 pub struct CompilerCtx<'a> {
@@ -28,7 +49,7 @@ pub struct CompilerCtx<'a> {
     consts: Vec<interpreter::Variable>,
 
     free_registers: Vec<usize>,
-    local_variables: HashMap<String, Variable>,
+    local_variables: HashMap<String, Reference>,
     num_registers: u16
 }
 
@@ -53,46 +74,98 @@ impl<'a> CompilerCtx<'a> {
     }
 
     fn lookup_local(&self, name: &str) -> usize {
-        match self.local_variables.get(name) {
-            Some(Variable::Reg(register, _)) => *register,
-            Some(Variable::Ref(name)) => self.lookup_local(name),
-            None => panic!("Use of non-existant variable") 
+        let v_ref = self.local_variables.get(name);
+        if let Some(Reference{register, ..}) = v_ref {
+            *register
+        } else { 
+            panic!("Use of non-existant variable") 
         }
     }
 
-    fn create_local(&mut self, name: &str) -> usize {
-        if self.local_variables.contains_key(name) {
-            panic!("Initialising a variable that already exists");
-        };
-        let register = match self.free_registers.pop() {
+    fn get_free_register(&mut self) -> usize {
+        match self.free_registers.pop() {
             Some(r) => r,
             None => {
                 self.num_registers += 1;
-               (self.num_registers - 1) as usize
+                (self.num_registers - 1) as usize
             }
+        }
+    }
+
+    fn create_variable(&mut self, name: &str) -> usize {
+        if self.local_variables.contains_key(name) {
+            panic!("Initialising a variable that already exists");
         };
+        let register = self.get_free_register();
         self.local_variables.insert(
             name.to_string(),
-            Variable::Reg(register, Vec::new())
+            Reference::new(name.to_string(), register, false)
         );
         register
     }
 
-    fn free_local(&mut self, name: &str) -> usize {
-        let true_name = match self.local_variables.get(name) {
-            Some(Variable::Reg(..)) => name.to_string(),
-            Some(Variable::Ref(other)) => other.clone(),
-            None => panic!("Freeing non-existant local")
+    fn create_ref(&mut self, name: &str, existing_name: &str, interior: bool) -> usize {
+        if self.local_variables.contains_key(name) {
+            panic!("Initialising a reference that already exists");
         };
+        
+        let (is_interior, mut register, var) = match self.local_variables.get(existing_name) {
+            None => panic!("Referencing a non-existant variable"),
+            Some(Reference{is_interior, register, var}) => {
+                (*is_interior || interior, *register, Rc::clone(var))
+            }
+        };
+        if is_interior { 
+            register = self.get_free_register();
+            var.interiors.borrow_mut().insert(name.to_string());
+        } else {
+            var.exteriors.borrow_mut().insert(name.to_string());
+        }
+    
+        self.local_variables.insert(
+            name.to_string(),
+            Reference{is_interior, register, var}
+        );
+        register
+    }
 
-        match self.local_variables.remove(&true_name) {
-            Some(Variable::Reg(register, references)) => {
-                for reference in references.iter() {
-                    self.local_variables.remove(reference);
+
+    fn remove_ref(&mut self, name: &str, other_name: &str, indices: bool) -> usize {
+
+        match self.local_variables.remove(name) {
+            None => panic!("Removing non-existant reference"),
+            Some(Reference{is_interior, register, var}) => {
+                let is_interior = is_interior || indices;
+
+                // Check the other is a shared ref
+                match self.local_variables.get(other_name) {
+                    None => panic!("Unreferencing a non-existant variable"),
+                    Some(Reference{var: other_var, is_interior: other_is_interior, ..}) => {
+                        if !Rc::ptr_eq(&var, other_var) || is_interior != *other_is_interior {
+                            panic!("Unreferencing using incorrect variable");
+                        }
+                    }
                 }
+
+                // Deref
+                var.interiors.borrow_mut().remove(name);
+                var.exteriors.borrow_mut().remove(name);
                 register
-            },
-            _ => unreachable!()
+            }
+        }
+    }
+
+    fn free_local(&mut self, name: &str) -> usize {
+        match self.local_variables.remove(name) {
+            None => panic!("Uninitialising non-existant variable"),
+            Some(Reference{var, register, ..}) => {
+                if !var.interiors.borrow().is_empty() 
+                        || var.exteriors.borrow().len() > 1 {
+                    panic!("Uninitialising variable with other refs");
+                }
+                self.free_registers.push(register);
+                register
+            }
         }
     }
 }
@@ -255,6 +328,7 @@ impl ast::StatementNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
         match self {
             ast::StatementNode::LetUnlet(valbox) => valbox.compile(ctx),
+            ast::StatementNode::LetUnletRef(valbox) => unimplemented!(),//valbox.compile(ctx),
             ast::StatementNode::If(valbox) => valbox.compile(ctx),
             ast::StatementNode::Modop(valbox) => valbox.compile(ctx),
             ast::StatementNode::Catch(valbox) => valbox.compile(ctx)
@@ -272,7 +346,7 @@ impl ast::LetUnletNode {
             code.push_bkwd(Instruction::StoreRegister{register});
             code.append_bkwd(self.rhs.compile(ctx));
         } else {
-            let register = ctx.create_local(&self.name);
+            let register = ctx.create_variable(&self.name);
             code.append_fwd(self.rhs.compile(ctx));
             code.push_fwd(Instruction::StoreRegister{register});
             code.push_bkwd(Instruction::FreeRegister{register});
