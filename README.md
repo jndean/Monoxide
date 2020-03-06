@@ -1,4 +1,4 @@
-# E92 - Bijective Monoxide
+# E292 - Bijective Monoxide
 
 A work in progress - Monoxide is mostly a direct descendant of [railway](https://github.com/jndean/railway), but this time around I am:
 
