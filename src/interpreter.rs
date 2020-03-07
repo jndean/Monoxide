@@ -29,6 +29,7 @@ impl fmt::Debug for Variable {
     }
 }
 
+
 impl Variable {
     fn to_bool(&self) -> bool {
         match self {
@@ -318,9 +319,9 @@ impl<'a> Interpreter<'a> {
         *self.pop_var().borrow_mut() = value;
     }
 
-    fn set(&mut self) {
+    /*fn set(&mut self) {
         let value = self.pop_var().borrow().clone();
-    }
+    }*/
 
     fn duplicate_top(&mut self) {
         let new = match self.stack.last().unwrap() {

@@ -6,7 +6,7 @@ use crate::tokeniser::Token;
 use crate::ast::{
     StatementNode, ExpressionNode, LookupNode, LetUnletNode,
     FractionNode, BinopNode, IfNode, ModopNode, FunctionNode,
-    CatchNode, ArrayLiteralNode, Module, LetUnletRefNode
+    CatchNode, ArrayLiteralNode, Module, RefUnrefNode
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -214,6 +214,7 @@ impl Parser {
     memoise!(statement_ as statement -> StatementNode);
     pub fn statement_(&mut self) -> Option<StatementNode> {
         if let Some(stmt) = self.letunlet_stmt() {return Some(stmt);}
+        if let Some(stmt) = self.refunref_stmt() {return Some(stmt);}
         if let Some(stmt) = self.modop_stmt() {return Some(stmt);}
         if let Some(stmt) = self.if_stmt() {return Some(stmt);}
         if let Some(stmt) = self.catch_stmt() {return Some(stmt);}
@@ -306,8 +307,8 @@ impl Parser {
         None
     }
 
-    memoise!(letunletref_stmt_ as letunletref_stmt -> StatementNode);
-    pub fn letunletref_stmt_(&mut self) -> Option<StatementNode> {
+    memoise!(refunref_stmt_ as refunref_stmt -> StatementNode);
+    pub fn refunref_stmt_(&mut self) -> Option<StatementNode> {
         let pos = self.mark();
 
         if let Some(name) = self.name() {
@@ -315,8 +316,8 @@ impl Parser {
         if self.expect_literal("&") {
         if let Some(rhs) = self.lookup() {
         if self.expect_literal(";") {
-            return Some(StatementNode::LetUnletRef(Box::new(
-                LetUnletRefNode{name, rhs, is_unlet: false}
+            return Some(StatementNode::RefUnref(Box::new(
+                RefUnrefNode{name, rhs, is_unref: false}
             )));
         }}}}};
         self.reset(pos);
@@ -326,8 +327,8 @@ impl Parser {
         if self.expect_literal("&") {
         if let Some(rhs) = self.lookup() {
         if self.expect_literal(";") {
-            return Some(StatementNode::LetUnletRef(Box::new(
-                LetUnletRefNode{name, rhs, is_unlet: true}
+            return Some(StatementNode::RefUnref(Box::new(
+                RefUnrefNode{name, rhs, is_unref: true}
             )));
         }}}}};
         self.reset(pos);

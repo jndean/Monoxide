@@ -104,7 +104,7 @@ impl<'a> CompilerCtx<'a> {
         register
     }
 
-    fn create_ref(&mut self, name: &str, existing_name: &str, interior: bool) -> usize {
+    pub fn create_ref(&mut self, name: &str, existing_name: &str, interior: bool) -> usize {
         if self.local_variables.contains_key(name) {
             panic!("Initialising a reference that already exists");
         };
@@ -130,20 +130,20 @@ impl<'a> CompilerCtx<'a> {
     }
 
 
-    fn remove_ref(&mut self, name: &str, other_name: &str, indices: bool) -> usize {
+    pub fn remove_ref(&mut self, name: &str, other_name: &str, indices: bool) -> usize {
 
         match self.local_variables.remove(name) {
             None => panic!("Removing non-existant reference"),
             Some(Reference{is_interior, register, var}) => {
                 let is_interior = is_interior || indices;
-
+                
                 // Check the other is a shared ref
                 match self.local_variables.get(other_name) {
                     None => panic!("Unreferencing a non-existant variable"),
                     Some(Reference{var: other_var, is_interior: other_is_interior, ..}) => {
-                        if !Rc::ptr_eq(&var, other_var) || is_interior != *other_is_interior {
-                            panic!("Unreferencing using incorrect variable");
-                        }
+                        let mut ok = Rc::ptr_eq(&var, other_var);  // Point to the same var
+                        ok &= !(*other_is_interior && !is_interior);  // Can't deref exterior using interior
+                        if !ok { panic!("Unreferencing using incorrect variable") };
                     }
                 }
 
@@ -155,7 +155,7 @@ impl<'a> CompilerCtx<'a> {
         }
     }
 
-    fn free_local(&mut self, name: &str) -> usize {
+    fn remove_variable(&mut self, name: &str) -> usize {
         match self.local_variables.remove(name) {
             None => panic!("Uninitialising non-existant variable"),
             Some(Reference{var, register, ..}) => {
@@ -328,7 +328,7 @@ impl ast::StatementNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
         match self {
             ast::StatementNode::LetUnlet(valbox) => valbox.compile(ctx),
-            ast::StatementNode::LetUnletRef(valbox) => unimplemented!(),//valbox.compile(ctx),
+            ast::StatementNode::RefUnref(valbox) => valbox.compile(ctx),
             ast::StatementNode::If(valbox) => valbox.compile(ctx),
             ast::StatementNode::Modop(valbox) => valbox.compile(ctx),
             ast::StatementNode::Catch(valbox) => valbox.compile(ctx)
@@ -341,7 +341,7 @@ impl ast::LetUnletNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
         let mut code = Code::new();
         if self.is_unlet {
-            let register = ctx.free_local(&self.name);
+            let register = ctx.remove_variable(&self.name);
             code.push_fwd(Instruction::FreeRegister{register});
             code.push_bkwd(Instruction::StoreRegister{register});
             code.append_bkwd(self.rhs.compile(ctx));
@@ -350,6 +350,33 @@ impl ast::LetUnletNode {
             code.append_fwd(self.rhs.compile(ctx));
             code.push_fwd(Instruction::StoreRegister{register});
             code.push_bkwd(Instruction::FreeRegister{register});
+        }
+        code
+    }
+}
+
+
+impl ast::RefUnrefNode {
+    pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
+        let ctx_method = if self.is_unref { CompilerCtx::remove_ref }
+                         else             { CompilerCtx::create_ref };
+        let register = ctx_method(ctx,
+            &self.name,
+            &self.rhs.name,
+            self.rhs.indices.len() > 0
+        );
+
+        let mut create_ref = self.rhs.compile(ctx);
+        create_ref.push(Instruction::StoreRegister{register});
+        let remove_ref = vec![Instruction::FreeRegister{register}];
+
+        let mut code = Code::new();
+        if self.is_unref{
+            code.append_fwd(remove_ref);
+            code.append_bkwd(create_ref);
+        } else {
+            code.append_fwd(create_ref);
+            code.append_bkwd(remove_ref);
         }
         code
     }
