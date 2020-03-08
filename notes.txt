@@ -128,20 +128,36 @@ Y =: [];
 
 
 
-Function argument annotations:
+########################
+## Function arguments ##
+########################
+
+Borrowed items may not be unlet or unref'd.
 
 # Default # 
 fn F(X)
-Caller may pass anything, so callee may not rearrange X at all.
+Caller may only pass singly-owned vars, so function can do what it likes
 
-# Unspecified #
-fn F(X :_)
-Caller only pass in singly-owned vars, so callee may do anything.
+# Unbound reference #
+fn F(&X)
+Function promises not to do anything it can't do to interior refs, so caller may pass
+in anything not linked to other args
 
-# Linked #
-fn F(X :A, x:a)()
-fn F(X :A) {
-   x += 1;
-} ~F();
+# Linked references #
+fn F(&A X, &a x, &b Y)(&b y) {
+  y =: &Y[0];
+  y2 := &Y[0];
+} ~F(&b y2);
 
-Caller may pass in 
+Caller may pass in references to shared vars if they share label.
+Function still can't reshape any of the ref vars, since it might not
+know about all refs. Upper case for exterior, lower case for interior refs.
+
+# Owned linked references #
+fn F<A>(&A X){
+    col <= X;
+    x := &x[0];
+} ~F(col, &a x);
+
+Chevron notation before the args denotes any labels that are owned by the function.
+The caller must pass all references to the function. The function may reshape vars.
