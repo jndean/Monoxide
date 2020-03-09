@@ -6,7 +6,7 @@ use std::fs;
 
 mod tokeniser;
 mod interpreter;
-mod ast;
+mod parsetree;
 mod compiler;
 mod parser;
 

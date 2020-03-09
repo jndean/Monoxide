@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::collections::{HashSet, HashMap};
 use std::rc::Rc;
 
-use crate::ast;
+use crate::parsetree;
 use crate::interpreter;
 use interpreter::Instruction;
 
@@ -264,18 +264,18 @@ impl Code {
 }
 
 
-impl ast::ExpressionNode {
+impl parsetree::ExpressionNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
         match &self {
-            ast::ExpressionNode::Fraction(valbox) => valbox.compile(ctx),
-            ast::ExpressionNode::Lookup(valbox) => valbox.compile(ctx),
-            ast::ExpressionNode::Binop(valbox) => valbox.compile(ctx),
-            ast::ExpressionNode::ArrayLiteral(valbox) => valbox.compile(ctx)
+            parsetree::ExpressionNode::Fraction(valbox) => valbox.compile(ctx),
+            parsetree::ExpressionNode::Lookup(valbox) => valbox.compile(ctx),
+            parsetree::ExpressionNode::Binop(valbox) => valbox.compile(ctx),
+            parsetree::ExpressionNode::ArrayLiteral(valbox) => valbox.compile(ctx)
         }
     }
 }
 
-impl ast::FractionNode {
+impl parsetree::FractionNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
         let idx = ctx.add_const(
             interpreter::Variable::Frac(self.value.clone())
@@ -285,7 +285,7 @@ impl ast::FractionNode {
 }
 
 
-impl ast::LookupNode {
+impl parsetree::LookupNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
         let register = ctx.lookup_local(&self.name);
         let mut instructions = Vec::with_capacity(self.indices.len()+1);        
@@ -301,7 +301,7 @@ impl ast::LookupNode {
 }
 
 
-impl ast::BinopNode {
+impl parsetree::BinopNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
         let mut ret = Vec::new();
         ret.extend(self.lhs.compile(ctx));
@@ -312,7 +312,7 @@ impl ast::BinopNode {
 }
 
 
-impl ast::ArrayLiteralNode {
+impl parsetree::ArrayLiteralNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Vec<Instruction> {
         let mut ret = Vec::with_capacity(self.items.len() + 1);
         for item in self.items.iter().rev() {
@@ -324,20 +324,20 @@ impl ast::ArrayLiteralNode {
 }
 
 
-impl ast::StatementNode {
+impl parsetree::StatementNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
         match self {
-            ast::StatementNode::LetUnlet(valbox) => valbox.compile(ctx),
-            ast::StatementNode::RefUnref(valbox) => valbox.compile(ctx),
-            ast::StatementNode::If(valbox) => valbox.compile(ctx),
-            ast::StatementNode::Modop(valbox) => valbox.compile(ctx),
-            ast::StatementNode::Catch(valbox) => valbox.compile(ctx)
+            parsetree::StatementNode::LetUnlet(valbox) => valbox.compile(ctx),
+            parsetree::StatementNode::RefUnref(valbox) => valbox.compile(ctx),
+            parsetree::StatementNode::If(valbox) => valbox.compile(ctx),
+            parsetree::StatementNode::Modop(valbox) => valbox.compile(ctx),
+            parsetree::StatementNode::Catch(valbox) => valbox.compile(ctx)
         }
     }
 }
 
 
-impl ast::LetUnletNode {
+impl parsetree::LetUnletNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
         let mut code = Code::new();
         if self.is_unlet {
@@ -356,7 +356,7 @@ impl ast::LetUnletNode {
 }
 
 
-impl ast::RefUnrefNode {
+impl parsetree::RefUnrefNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
         let ctx_method = if self.is_unref { CompilerCtx::remove_ref }
                          else             { CompilerCtx::create_ref };
@@ -383,7 +383,7 @@ impl ast::RefUnrefNode {
 }
 
 
-impl ast::ModopNode {
+impl parsetree::ModopNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
         let lookup = self.lookup.compile(ctx);
         let rhs = self.rhs.compile(ctx);
@@ -415,7 +415,7 @@ impl ast::ModopNode {
 }
 
 
-impl ast::IfNode {
+impl parsetree::IfNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
         let fwd_expr = self.fwd_expr.compile(ctx);
         let bkwd_expr = self.bkwd_expr.compile(ctx);
@@ -451,7 +451,7 @@ impl ast::IfNode {
     }
 }
 
-impl ast::CatchNode {
+impl parsetree::CatchNode {
     pub fn compile(&self, ctx: &mut CompilerCtx) -> Code {
         let mut code = Code::new();
         code.append_fwd(self.expr.compile(ctx));
@@ -461,7 +461,7 @@ impl ast::CatchNode {
     }
 }
 
-impl ast::FunctionNode {
+impl parsetree::FunctionNode {
     pub fn compile(&self, func_names: &Vec<String>) -> interpreter::Function {
         let mut ctx = CompilerCtx::new(func_names);
         let mut code = Code::new();
@@ -478,7 +478,7 @@ impl ast::FunctionNode {
     }
 }
 
-impl ast::Module {
+impl parsetree::Module {
     pub fn compile(&self) -> interpreter::Module {
         let func_names: Vec<String> = 
             self.functions.iter().map(|f| f.name.clone()).collect();
