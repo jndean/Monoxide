@@ -21,15 +21,21 @@ fn main(argv)()
         println("Sum:", sum);
     }
 
-    X = [1,2,3];
-    for (x in X) {
-        
-    }
+    
 
 } ~main();
 
 
-argmax(X)() {
+fn reshape2D()() {
+
+} ~reshape2D()
+
+fn myfunc(&ab grid, width, height, &a col1, &b col2)() {
+
+} ~myfunc();
+
+
+fn argmax(X)() {
     .best_idx := 0;
     .best &= X[0];
 

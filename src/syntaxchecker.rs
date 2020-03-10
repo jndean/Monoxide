@@ -1,6 +1,7 @@
 
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::interpreter;
 use crate::parsetree as PT;
@@ -39,6 +40,7 @@ impl Reference {
 #[derive(Debug)]
 pub struct SyntaxContext<'a> {
     func_names: &'a Vec<String>,
+    consts: Vec<interpreter::Variable>,
     free_registers: Vec<usize>,
     local_variables: HashMap<String, Reference>,
     num_registers: u16
@@ -49,6 +51,7 @@ impl<'a> SyntaxContext<'a> {
     pub fn new(func_names: &Vec<String>) -> SyntaxContext {
         SyntaxContext{
             func_names,
+            consts: Vec::new(),
             free_registers: Vec::new(),
             local_variables: HashMap::new(),
             num_registers: 0
@@ -99,7 +102,7 @@ impl<'a> SyntaxContext<'a> {
             panic!("Initialising a reference that already exists");
         };
         
-        let (is_interior, mut register, var) = match self.local_variables.get(lookup.name) {
+        let (is_interior, mut register, var) = match self.local_variables.get(&lookup.name) {
             None => panic!("Referencing a non-existant variable"),
             Some(Reference{is_interior, register, var}) => {
                 (*is_interior || lookup.indices.len() > 0, *register, Rc::clone(var))
@@ -128,7 +131,7 @@ impl<'a> SyntaxContext<'a> {
                 let is_interior = is_interior || lookup.indices.len() > 0;
                 
                 // Check the other name is a shared ref
-                match self.local_variables.get(lookup.name) {
+                match self.local_variables.get(&lookup.name) {
                     None => panic!("Unreferencing a non-existant variable"),
                     Some(Reference{var: other_var, is_interior: other_is_interior, ..}) => {
                         let mut ok = Rc::ptr_eq(&var, other_var);  // Point to the same var
@@ -161,128 +164,143 @@ impl<'a> SyntaxContext<'a> {
 }
 
 
-impl PT::FractionNode {
-    fn check(&self, ctx: &mut SyntaxContext) -> ST::FractionNode {
-        ST::FractionNode{value: self.value}
+impl ST::FractionNode {
+    fn from(node: PT::FractionNode, ctx: &mut SyntaxContext) -> ST::FractionNode {
+        ST::FractionNode{value: node.value}
     }
 }
 
-impl PT::BinopNode {
-    fn check(&self, ctx: &mut SyntaxContext) -> ST::BinopNode {
+impl ST::BinopNode {
+    fn from(node: PT::BinopNode, ctx: &mut SyntaxContext) -> ST::BinopNode {
         ST::BinopNode{
-            lhs: self.lhs.check(ctx),
-            rhs: self.rhs.check(ctx),
-            op: self.op
+            lhs: ST::ExpressionNode::from(node.lhs, ctx),
+            rhs: ST::ExpressionNode::from(node.rhs, ctx),
+            op: node.op
         }
     }
 }
 
-impl PT::ArrayLiteralNode {
-    fn check(&self, ctx: &mut SyntaxContext) -> ST::ArrayLiteralNode {
+impl ST::ArrayLiteralNode {
+    fn from(node: PT::ArrayLiteralNode, ctx: &mut SyntaxContext) -> ST::ArrayLiteralNode {
         ST::ArrayLiteralNode{
-            items: self.items.map(|i| i.check(ctx)).collect()
+            items: node.items.into_iter()
+                             .map(|i| ST::ExpressionNode::from(i, ctx))
+                             .collect()
         }
     }
 }
 
-impl PT::LookupNode {
-    fn check(&self, ctx: &mut SyntaxContext) -> ST::LookupNode {
-        ST::ArrayLiteralNode{
-            register: ctx.lookup_local(self.name),
-            indices: self.indices.map(|i| i.check(ctx)).collect()
+impl ST::LookupNode {
+    fn from(node: PT::LookupNode, ctx: &mut SyntaxContext) -> ST::LookupNode {
+        ST::LookupNode{
+            register: ctx.lookup_local(&node.name),
+            indices: node.indices.into_iter()
+                                 .map(|i| ST::ExpressionNode::from(i, ctx))
+                                 .collect()
         }
     }
 }
 
-impl PT::ExpressionNode {
-    fn check(&self, ctx: &mut SyntaxContext) -> ST::ExpressionNode {
-        match self {
+impl ST::ExpressionNode {
+    fn from(node: PT::ExpressionNode, ctx: &mut SyntaxContext) -> ST::ExpressionNode {
+        match node {
             PT::ExpressionNode::Fraction(valbox) => 
-                ST::ExpressionNode::Fraction{Box::new(valbox.check(ctx))},
+                ST::ExpressionNode::Fraction(Box::new(ST::FractionNode::from(*valbox, ctx))),
             PT::ExpressionNode::Binop(valbox) => 
-                ST::ExpressionNode::Binop{Box::new(valbox.check(ctx))},
+                ST::ExpressionNode::Binop(Box::new(ST::BinopNode::from(*valbox, ctx))),
             PT::ExpressionNode::ArrayLiteral(valbox) => 
-                ST::ExpressionNode::ArrayLiteral{Box::new(valbox.check(ctx))},
+                ST::ExpressionNode::ArrayLiteral(Box::new(ST::ArrayLiteralNode::from(*valbox, ctx))),
             PT::ExpressionNode::Lookup(valbox) => 
-                ST::ExpressionNode::Lookup{Box::new(valbox.check(ctx))},
+                ST::ExpressionNode::Lookup(Box::new(ST::LookupNode::from(*valbox, ctx))),
         }
     }
 }
 
 
-impl PT::LetUnletNode {
-    fn check(&self, ctx: &mut SyntaxContext) -> ST::LetUnletNode {
+impl ST::LetUnletNode {
+    fn from(node: PT::LetUnletNode, ctx: &mut SyntaxContext) -> ST::LetUnletNode {
         ST::LetUnletNode{
-            is_unlet: self.is_unlet,
-            register: if self.is_unlet {ctx.remove_variable(self.name)}
-                      else             {ctx.create_variable(self.name)},
-            rhs: self.rhs.check(ctx)
+            is_unlet: node.is_unlet,
+            register: if node.is_unlet {ctx.remove_variable(&node.name)}
+                      else             {ctx.create_variable(&node.name)},
+            rhs: ST::ExpressionNode::from(node.rhs, ctx)
         }
     }
 }
 
-impl PT::RefUnrefNode {
-    fn check(&self, ctx: &mut SyntaxContext) -> ST::RefUnrefNode {
-        let rhs = self.rhs.check(ctx);
-        let register = if self.is_unref {ctx.remove_ref(self.name, &rhs)}
-                       else             {ctx.create_ref(self.name, &rhs)};
-        ST::RefUnrefNode{is_unref: self.is_unref, register, rhs}
+impl ST::RefUnrefNode {
+    fn from(node: PT::RefUnrefNode, ctx: &mut SyntaxContext) -> ST::RefUnrefNode {
+        ST::RefUnrefNode{
+            is_unref: node.is_unref, 
+            register: if node.is_unref {ctx.remove_ref(&node.name, &node.rhs)}
+                      else             {ctx.create_ref(&node.name, &node.rhs)},
+            rhs: ST::LookupNode::from(node.rhs, ctx)
+        }
     }
 }
 
-impl PT::ModopNode {
-    fn check(&self, ctx: &mut SyntaxContext) -> ST::ModopNode {
+impl ST::ModopNode {
+    fn from(node: PT::ModopNode, ctx: &mut SyntaxContext) -> ST::ModopNode {
         ST::ModopNode{
-            lookup: self.rhs.check(ctx),
-            op: self.op,
-            rhs: self.rhs.check(ctx)
+            lookup: ST::LookupNode::from(node.lookup, ctx),
+            op: node.op,
+            rhs: ST::ExpressionNode::from(node.rhs, ctx)
         }
     }
 }
 
-impl PT::IfNode {
-    fn check(&self, ctx: &mut SyntaxContext) -> ST::IfNode {
-        let fwd_expr = self.fwd_expr.check(ctx);
-        let bkwd_expr = self.bkwd_expr.check(ctx);
-        let if_stmts = self.if_stmts.map(|s| s.check(ctx)).collect();
-        let else_stmts = self.else_stmts.map(|s| s.check(ctx)).collect();
-        ST::IfNode{fwd_expr, if_stmts, else_stmts, bkwd_stmts}
+impl ST::IfNode {
+    fn from(node: PT::IfNode, ctx: &mut SyntaxContext) -> ST::IfNode {
+        let fwd_expr = ST::ExpressionNode::from(node.fwd_expr, ctx);
+        let bkwd_expr = ST::ExpressionNode::from(node.bkwd_expr, ctx);
+        let if_stmts = node.if_stmts.into_iter().map(|s| ST::StatementNode::from(s, ctx)).collect();
+        let else_stmts = node.else_stmts.into_iter().map(|s| ST::StatementNode::from(s, ctx)).collect();
+        ST::IfNode{fwd_expr, if_stmts, else_stmts, bkwd_expr}
     }
 }
 
-impl PT::CatchNode {
-    fn check(&self, ctx: &mut SyntaxContext) -> ST::CatchNode {
-        ST::CatchNode{expr: self.expr.check(ctx)}
+impl ST::CatchNode {
+    fn from(node: PT::CatchNode, ctx: &mut SyntaxContext) -> ST::CatchNode {
+        ST::CatchNode{expr: ST::ExpressionNode::from(node.expr, ctx)}
     }
 }
 
-impl PT::FunctionNode {
-    fn check(&self, func_names: &'a Vec<String>) -> ST::FunctionNode {
-        let ctx = SyntaxContext::new(func_names);
+impl ST::FunctionNode {
+    fn from(node: PT::FunctionNode, func_names: &Vec<String>) -> ST::FunctionNode {
+        let mut ctx = SyntaxContext::new(func_names);
         ST::FunctionNode{
-            name: self.name,
-            borrow_params: self.borrow_params,
-            steal_params: self.steal_params,
-            return_params: self.return_params,
-            stmts: self.stmts.map(|s| s.check(ctx)).collect())
+            name: node.name,
+            borrow_params: node.borrow_params,
+            steal_params: node.steal_params,
+            return_params: node.return_params,
+            stmts: node.stmts.into_iter().map(|s| ST::StatementNode::from(s, &mut ctx)).collect()
+        }
     }
 }
 
-impl PT::Module {
-    fn check(&self) -> ST::Module {
-        let func_names = self.functions.map(|f| f.name).collect();
-        ST::Module{
-            functions: self.functions.map(|f| f.check(&func_names)).collect()
-        }
-    }
-}
-/*
-impl PT::StatementNode {
-    fn check(&self, ctx: &mut SyntaxContext) -> ST::StatementNode {
-        match self {
+impl ST::StatementNode {
+    fn from(node: PT::StatementNode, ctx: &mut SyntaxContext) -> ST::StatementNode {
+        match node {
             PT::StatementNode::LetUnlet(valbox) =>
-                
+                ST::StatementNode::LetUnlet(Box::new(ST::LetUnletNode::from(*valbox, ctx))),
+            PT::StatementNode::RefUnref(valbox) =>
+                ST::StatementNode::RefUnref(Box::new(ST::RefUnrefNode::from(*valbox, ctx))),
+            PT::StatementNode::Modop(valbox) =>
+                ST::StatementNode::Modop(Box::new(ST::ModopNode::from(*valbox, ctx))),        
+            PT::StatementNode::If(valbox) =>
+                ST::StatementNode::If(Box::new(ST::IfNode::from(*valbox, ctx))),
+            PT::StatementNode::Catch(valbox) =>
+                ST::StatementNode::Catch(Box::new(ST::CatchNode::from(*valbox, ctx)))
         }
     }
 }
-*/
+
+pub fn check_syntax(module: PT::Module) -> ST::Module{
+    let func_names = module.functions.iter()
+                                     .map(|f| f.name.clone())
+                                     .collect();
+    let functions = module.functions.into_iter()
+                                    .map(|f| ST::FunctionNode::from(f, &func_names))
+                                    .collect();
+    ST::Module{functions}
+}

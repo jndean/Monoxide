@@ -7,6 +7,8 @@ use std::fs;
 mod tokeniser;
 mod interpreter;
 mod parsetree;
+mod syntaxtree;
+mod syntaxchecker;
 mod compiler;
 mod parser;
 
@@ -17,10 +19,11 @@ fn main() {
     let src = fs::read_to_string("examples/tmp.mx").expect("File io error");
     let tokens = tokeniser::tokenise(&src);
     println!("{:#?}", tokens);
-    let module = parser::parse(tokens).expect("Failed to parse");
-    println!("Parsed: {:#?}", module);
-    let program = module.compile();
-    println!("Compiled: {:#?}", program);
-    interpreter::Interpreter::run(&program);
+    let parsed = parser::parse(tokens).expect("Failed to parse");
+    let checked = syntaxchecker::check_syntax(parsed);
+    // println!("Parsed: {:#?}", module);
+    // let program = module.compile();
+    // println!("Compiled: {:#?}", program);
+    // interpreter::Interpreter::run(&program);
     
 }
