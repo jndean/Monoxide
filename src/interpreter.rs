@@ -91,7 +91,8 @@ pub enum Instruction {
     CreateArray{size: usize},
     Call{idx: usize},
     Uncall{idx: usize},
-    Duplicate,
+    DuplicateRef,
+    CopyVar,
     Quit,
     DebugPrint,
 }
@@ -205,7 +206,8 @@ impl<'a> Interpreter<'a> {
                 Instruction::FreeRegister{register} => self.free_register(*register),
                 Instruction::Store => self.store(),
                 Instruction::Subscript{size} => self.subscript(*size),
-                Instruction::Duplicate => self.duplicate_top(),
+                Instruction::DuplicateRef => self.duplicate_ref(),
+                Instruction::CopyVar => self.copy_var(),
                 Instruction::BinopAdd => self.binop_add(),
                 Instruction::BinopSub => self.binop_sub(),
                 Instruction::BinopMul => self.binop_mul(),
@@ -319,16 +321,25 @@ impl<'a> Interpreter<'a> {
         *self.pop_var().borrow_mut() = value;
     }
 
-    /*fn set(&mut self) {
-        let value = self.pop_var().borrow().clone();
-    }*/
-
-    fn duplicate_top(&mut self) {
+    fn duplicate_ref(&mut self) {
         let new = match self.stack.last().unwrap() {
             StackObject::Var(cell) => StackObject::Var(Rc::clone(cell)),
             _ => panic!("Trying to duplicate non-variable")
         };
         self.stack.push(new);
+    }
+
+    fn copy_var(&mut self) {
+        let var = self.pop_var();
+        if Rc::strong_count(&var) > 1 {
+            self.stack.push(
+                StackObject::Var(Rc::new(RefCell::new(
+                    var.borrow().deep_copy()
+                ))
+            ));
+        } else {
+            self.stack.push(StackObject::Var(var));
+        }
     }
 
     binop_method!(binop_add, +);

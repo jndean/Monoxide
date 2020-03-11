@@ -172,11 +172,15 @@ impl ST::LetUnletNode {
         let mut code = Code::new();
         if self.is_unlet {
             code.push_fwd(Instruction::FreeRegister{register: self.register});
+
             code.push_bkwd(Instruction::StoreRegister{register: self.register});
+            code.push_bkwd(Instruction::CopyVar);
             code.append_bkwd(self.rhs.compile());
         } else {
             code.append_fwd(self.rhs.compile());
+            code.push_fwd(Instruction::CopyVar);
             code.push_fwd(Instruction::StoreRegister{register: self.register});
+
             code.push_bkwd(Instruction::FreeRegister{register: self.register});
         }
         code
@@ -219,7 +223,7 @@ impl ST::ModopNode {
         let mut code = Code::with_capacity(capacity, capacity);
 
         code.append_fwd(lookup.clone());
-        code.push_fwd(Instruction::Duplicate);
+        code.push_fwd(Instruction::DuplicateRef);
         code.append_fwd(rhs.clone());
         code.push_fwd(self.op.clone());
         code.push_fwd(Instruction::Store);
@@ -227,7 +231,7 @@ impl ST::ModopNode {
         code.push_bkwd(Instruction::Store);
         code.push_bkwd(bkwd_op);
         code.append_bkwd(rhs);
-        code.push_bkwd(Instruction::Duplicate);
+        code.push_bkwd(Instruction::DuplicateRef);
         code.append_bkwd(lookup);
         
         code
