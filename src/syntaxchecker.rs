@@ -43,7 +43,7 @@ pub struct SyntaxContext<'a> {
     consts: Vec<interpreter::Variable>,
     free_registers: Vec<usize>,
     local_variables: HashMap<String, Reference>,
-    num_registers: u16
+    num_registers: usize
 }
 
 
@@ -166,7 +166,10 @@ impl<'a> SyntaxContext<'a> {
 
 impl ST::FractionNode {
     fn from(node: PT::FractionNode, ctx: &mut SyntaxContext) -> ST::FractionNode {
-        ST::FractionNode{value: node.value}
+        let const_idx = ctx.add_const(
+            interpreter::Variable::Frac(node.value)
+        );
+        ST::FractionNode{const_idx}
     }
 }
 
@@ -201,18 +204,19 @@ impl ST::LookupNode {
     }
 }
 
+
+
 impl ST::ExpressionNode {
     fn from(node: PT::ExpressionNode, ctx: &mut SyntaxContext) -> ST::ExpressionNode {
-        match node {
-            PT::ExpressionNode::Fraction(valbox) => 
-                ST::ExpressionNode::Fraction(Box::new(ST::FractionNode::from(*valbox, ctx))),
-            PT::ExpressionNode::Binop(valbox) => 
-                ST::ExpressionNode::Binop(Box::new(ST::BinopNode::from(*valbox, ctx))),
-            PT::ExpressionNode::ArrayLiteral(valbox) => 
-                ST::ExpressionNode::ArrayLiteral(Box::new(ST::ArrayLiteralNode::from(*valbox, ctx))),
-            PT::ExpressionNode::Lookup(valbox) => 
-                ST::ExpressionNode::Lookup(Box::new(ST::LookupNode::from(*valbox, ctx))),
-        }
+        macro_rules! passthrough {
+            ($( $x:ident ),*) => {
+                match node {
+                    $(
+                        PT::ExpressionNode::$x(valbox) =>
+                        ST::ExpressionNode::$x(Box::new(ST::$x::from(*valbox, ctx)))
+                    ,)*
+        }   }   }
+        passthrough! {FractionNode, BinopNode, ArrayLiteralNode, LookupNode}
     }
 }
 
@@ -273,25 +277,24 @@ impl ST::FunctionNode {
             borrow_params: node.borrow_params,
             steal_params: node.steal_params,
             return_params: node.return_params,
-            stmts: node.stmts.into_iter().map(|s| ST::StatementNode::from(s, &mut ctx)).collect()
+            stmts: node.stmts.into_iter().map(|s| ST::StatementNode::from(s, &mut ctx)).collect(),
+            consts: ctx.consts,
+            num_registers: ctx.num_registers
         }
     }
 }
 
 impl ST::StatementNode {
     fn from(node: PT::StatementNode, ctx: &mut SyntaxContext) -> ST::StatementNode {
-        match node {
-            PT::StatementNode::LetUnlet(valbox) =>
-                ST::StatementNode::LetUnlet(Box::new(ST::LetUnletNode::from(*valbox, ctx))),
-            PT::StatementNode::RefUnref(valbox) =>
-                ST::StatementNode::RefUnref(Box::new(ST::RefUnrefNode::from(*valbox, ctx))),
-            PT::StatementNode::Modop(valbox) =>
-                ST::StatementNode::Modop(Box::new(ST::ModopNode::from(*valbox, ctx))),        
-            PT::StatementNode::If(valbox) =>
-                ST::StatementNode::If(Box::new(ST::IfNode::from(*valbox, ctx))),
-            PT::StatementNode::Catch(valbox) =>
-                ST::StatementNode::Catch(Box::new(ST::CatchNode::from(*valbox, ctx)))
-        }
+        macro_rules! passthrough {
+            ($( $x:ident ),*) => {
+                match node {
+                    $(
+                        PT::StatementNode::$x(valbox) => 
+                        ST::StatementNode::$x(Box::new(ST::$x::from(*valbox, ctx)))
+                    ,)*
+        }   }   }
+        passthrough! {LetUnletNode, RefUnrefNode, ModopNode, IfNode, CatchNode}
     }
 }
 

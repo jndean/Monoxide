@@ -1,26 +1,19 @@
 
-use std::fmt;
 
 use crate::interpreter;
 
 
 #[derive(Clone, Debug)]
 pub enum ExpressionNode {
-    Fraction(Box<FractionNode>),
-    Lookup(Box<LookupNode>),
-    Binop(Box<BinopNode>),
-    ArrayLiteral(Box<ArrayLiteralNode>)
+    FractionNode(Box<FractionNode>),
+    LookupNode(Box<LookupNode>),
+    BinopNode(Box<BinopNode>),
+    ArrayLiteralNode(Box<ArrayLiteralNode>)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FractionNode {
-    pub value: interpreter::Fraction
-}
-
-impl fmt::Debug for FractionNode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.value)
-    }
+    pub const_idx: usize
 }
 
 #[derive(Clone, Debug)]
@@ -44,11 +37,11 @@ pub struct BinopNode {
 
 #[derive(Clone, Debug)]
 pub enum StatementNode {
-    LetUnlet(Box<LetUnletNode>),
-    RefUnref(Box<RefUnrefNode>),
-    If(Box<IfNode>),
-    Modop(Box<ModopNode>),
-    Catch(Box<CatchNode>)
+    LetUnletNode(Box<LetUnletNode>),
+    RefUnrefNode(Box<RefUnrefNode>),
+    IfNode(Box<IfNode>),
+    ModopNode(Box<ModopNode>),
+    CatchNode(Box<CatchNode>)
 }
 
 #[derive(Clone, Debug)]
@@ -89,10 +82,13 @@ pub struct CatchNode {
 #[derive(Clone, Debug)]
 pub struct FunctionNode {
     pub name: String,
+    pub stmts: Vec<StatementNode>,
+    pub consts: Vec<interpreter::Variable>,
+    pub num_registers: usize,
+
     pub borrow_params: Vec<String>,
     pub steal_params: Vec<String>,
     pub return_params: Vec<String>,
-    pub stmts: Vec<StatementNode>
 }
 
 #[derive(Clone, Debug)]

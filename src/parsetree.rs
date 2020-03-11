@@ -6,10 +6,10 @@ use crate::interpreter;
 
 #[derive(Clone, Debug)]
 pub enum ExpressionNode {
-    Fraction(Box<FractionNode>),
-    Lookup(Box<LookupNode>),
-    Binop(Box<BinopNode>),
-    ArrayLiteral(Box<ArrayLiteralNode>)
+    FractionNode(Box<FractionNode>),
+    LookupNode(Box<LookupNode>),
+    BinopNode(Box<BinopNode>),
+    ArrayLiteralNode(Box<ArrayLiteralNode>)
 }
 
 #[derive(Clone)]
@@ -44,11 +44,11 @@ pub struct BinopNode {
 
 #[derive(Clone, Debug)]
 pub enum StatementNode {
-    LetUnlet(Box<LetUnletNode>),
-    RefUnref(Box<RefUnrefNode>),
-    If(Box<IfNode>),
-    Modop(Box<ModopNode>),
-    Catch(Box<CatchNode>)
+    LetUnletNode(Box<LetUnletNode>),
+    RefUnrefNode(Box<RefUnrefNode>),
+    IfNode(Box<IfNode>),
+    ModopNode(Box<ModopNode>),
+    CatchNode(Box<CatchNode>)
 }
 
 #[derive(Clone, Debug)]
