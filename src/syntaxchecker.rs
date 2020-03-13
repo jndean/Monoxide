@@ -39,7 +39,7 @@ impl Reference {
 
 #[derive(Debug)]
 pub struct SyntaxContext<'a> {
-    func_names: &'a Vec<String>,
+    functions: &'a HashMap<String, ST::FunctionPrototype>,
     consts: Vec<interpreter::Variable>,
     free_registers: Vec<usize>,
     local_variables: HashMap<String, Reference>,
@@ -48,9 +48,9 @@ pub struct SyntaxContext<'a> {
 
 
 impl<'a> SyntaxContext<'a> {
-    pub fn new(func_names: &Vec<String>) -> SyntaxContext {
+    pub fn new(functions: &HashMap<String, ST::FunctionPrototype>) -> SyntaxContext {
         SyntaxContext{
-            func_names,
+            functions,
             consts: Vec::new(),
             free_registers: Vec::new(),
             local_variables: HashMap::new(),
@@ -64,6 +64,14 @@ impl<'a> SyntaxContext<'a> {
         }
         self.consts.push(val);
         self.consts.len() - 1
+    }
+
+    fn lookup_function(&self, name: &str) -> usize {
+        println!("Name: {}", name);
+        println!("Prototypes: {:#?}", self.functions);
+        let prototype = self.functions.get(name)
+                                      .expect("Undefined function");
+        prototype.id
     }
 
     fn lookup_local(&self, name: &str) -> usize {
@@ -269,9 +277,35 @@ impl ST::CatchNode {
     }
 }
 
+
+impl ST::CallUncallNode {
+    fn from(node: PT::CallUncallNode, ctx: &mut SyntaxContext) -> ST::CallUncallNode {
+        ST::CallUncallNode{
+            is_uncall: node.is_uncall,
+            func_idx: ctx.lookup_function(&node.name),
+            borrow_args: node.borrow_args.into_iter()
+                                         .map(|a| ST::LookupNode::from(a, ctx))
+                                         .collect()
+        }
+    }
+}
+
+impl ST::CallChainNode {
+    fn from(node: PT::CallChainNode, ctx: &mut SyntaxContext) -> ST::CallChainNode {
+        ST::CallChainNode{
+            calls: node.calls.into_iter()
+                             .map(|c| ST::CallUncallNode::from(c, ctx))
+                             .collect(),
+            stolen_args: node.stolen_args,
+            return_args: node.return_args
+        }
+    }
+}
+
 impl ST::FunctionNode {
-    fn from(node: PT::FunctionNode, func_names: &Vec<String>) -> ST::FunctionNode {
-        let mut ctx = SyntaxContext::new(func_names);
+    fn from(node: PT::FunctionNode, 
+            func_lookup: &HashMap<String, ST::FunctionPrototype>) -> ST::FunctionNode {
+        let mut ctx = SyntaxContext::new(func_lookup);
         ST::FunctionNode{
             name: node.name,
             borrow_params: node.borrow_params,
@@ -280,6 +314,17 @@ impl ST::FunctionNode {
             stmts: node.stmts.into_iter().map(|s| ST::StatementNode::from(s, &mut ctx)).collect(),
             consts: ctx.consts,
             num_registers: ctx.num_registers
+        }
+    }
+}
+
+impl ST::FunctionPrototype {
+    fn from(function: &PT::FunctionNode, id: usize) -> ST::FunctionPrototype {
+        ST::FunctionPrototype{
+            id,
+            borrow_params: function.borrow_params.clone(),
+            steal_params: function.steal_params.clone(),
+            return_params: function.return_params.clone()
         }
     }
 }
@@ -294,16 +339,25 @@ impl ST::StatementNode {
                         ST::StatementNode::$x(Box::new(ST::$x::from(*valbox, ctx)))
                     ,)*
         }   }   }
-        passthrough! {LetUnletNode, RefUnrefNode, ModopNode, IfNode, CatchNode}
+        passthrough! {
+            LetUnletNode, RefUnrefNode, ModopNode, IfNode, CatchNode,
+            CallChainNode
+        }
     }
 }
 
 pub fn check_syntax(module: PT::Module) -> ST::Module{
-    let func_names = module.functions.iter()
-                                     .map(|f| f.name.clone())
-                                     .collect();
+    let mut func_prototypes = HashMap::new();
+    
+    for f in module.functions.iter() {
+        func_prototypes.insert(
+            f.name.clone(),
+            ST::FunctionPrototype::from(&f, func_prototypes.len())
+        );
+    }
+
     let functions = module.functions.into_iter()
-                                    .map(|f| ST::FunctionNode::from(f, &func_names))
+                                    .map(|f| ST::FunctionNode::from(f, &func_prototypes))
                                     .collect();
     ST::Module{functions}
 }

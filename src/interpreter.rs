@@ -92,7 +92,7 @@ pub enum Instruction {
     Call{idx: usize},
     Uncall{idx: usize},
     DuplicateRef,
-    CopyVar,
+    UniqueVar,
     Quit,
     DebugPrint,
 }
@@ -143,6 +143,7 @@ pub struct Function {
 
 #[derive(Debug)]
 pub struct Module {
+    pub main_idx: Option<usize>,
     pub functions: Vec<Function>
 }
 
@@ -169,7 +170,8 @@ macro_rules! binop_method {
 impl<'a> Interpreter<'a> {
 
     pub fn run(module: &Module) {
-        let main = module.functions.get(0).expect("No main function");
+        let main_idx = module.main_idx.expect("No main function");
+        let main = module.functions.get(main_idx).unwrap();
         let mut interpreter = Interpreter {
             functions: &module.functions,
             stack: Vec::new(),
@@ -180,57 +182,64 @@ impl<'a> Interpreter<'a> {
             registers: vec![None; main.num_registers],
             consts: &main.consts
         };
-        interpreter.call(0, true);
         interpreter.execute();
         interpreter.debug_print();
     }
 
     pub fn execute(&mut self) -> () {
 
-        let scope = self.scope_stack.last().unwrap();
-        let mut instructions = if scope.forwards {&scope.code.fwd} else {&scope.code.bkwd};
+        'instruction_loop: loop{
 
-        'instruction_loop: loop {
+            let instructions = if self.forwards {&self.code.fwd} 
+                               else             {&self.code.bkwd};
 
-            let instruction = match instructions.get(self.scope_stack.last().unwrap().ip) {
-                Some(inst) => inst,
-                None => break
-            };
+            'ip_loop: loop {
 
-            println!("IP: {}, {:?}", self.scope_stack.last().unwrap().ip, instruction);
+                let instruction = match instructions.get(self.ip) {
+                    Some(inst) => inst,
+                    None => {
+                        if self.scope_stack.is_empty() { 
+                            break 'instruction_loop;
+                        } else {
+                            self.end_call(); 
+                            continue 'instruction_loop;
+                        };
+                    }
+                };
 
-            match instruction {
-                Instruction::LoadConst{idx} => self.load_const(*idx),
-                Instruction::LoadRegister{register} => self.load_register(*register),
-                Instruction::StoreRegister{register} => self.store_register(*register),
-                Instruction::FreeRegister{register} => self.free_register(*register),
-                Instruction::Store => self.store(),
-                Instruction::Subscript{size} => self.subscript(*size),
-                Instruction::DuplicateRef => self.duplicate_ref(),
-                Instruction::CopyVar => self.copy_var(),
-                Instruction::BinopAdd => self.binop_add(),
-                Instruction::BinopSub => self.binop_sub(),
-                Instruction::BinopMul => self.binop_mul(),
-                Instruction::BinopDiv => self.binop_div(),
-                Instruction::CreateArray{size} => self.create_array(*size),
-                Instruction::Jump{delta} => self.jump(*delta),
-                Instruction::JumpIfTrue{delta} => self.jump_if_true(*delta),
-                Instruction::JumpIfFalse{delta} => self.jump_if_false(*delta),
-                Instruction::Pull => self.pull(),
-                Instruction::Call{idx} => self.call(*idx, true),
-                Instruction::Uncall{idx} => unimplemented!(),
-                Instruction::Reverse{idx} => {
-                    let scope: &mut Scope = self.scope_stack.last_mut().unwrap();
-                    scope.forwards = !scope.forwards;
-                    scope.ip = *idx;
-                    instructions = if scope.forwards {&scope.code.fwd} else {&scope.code.bkwd};
-                    continue 'instruction_loop;
+                println!("IP: {}, {:?}", self.ip, instruction);
+
+                match instruction {
+                    Instruction::LoadConst{idx} => self.load_const(*idx),
+                    Instruction::LoadRegister{register} => self.load_register(*register),
+                    Instruction::StoreRegister{register} => self.store_register(*register),
+                    Instruction::FreeRegister{register} => self.free_register(*register),
+                    Instruction::Store => self.store(),
+                    Instruction::Subscript{size} => self.subscript(*size),
+                    Instruction::DuplicateRef => self.duplicate_ref(),
+                    Instruction::UniqueVar => self.copy_var(),
+                    Instruction::BinopAdd => self.binop_add(),
+                    Instruction::BinopSub => self.binop_sub(),
+                    Instruction::BinopMul => self.binop_mul(),
+                    Instruction::BinopDiv => self.binop_div(),
+                    Instruction::CreateArray{size} => self.create_array(*size),
+                    Instruction::Jump{delta} => self.jump(*delta),
+                    Instruction::JumpIfTrue{delta} => self.jump_if_true(*delta),
+                    Instruction::JumpIfFalse{delta} => self.jump_if_false(*delta),
+                    Instruction::Pull => self.pull(),
+                    Instruction::Call{idx} => {self.call(*idx, true); continue 'instruction_loop},
+                    Instruction::Uncall{idx} => {self.call(*idx, false); continue 'instruction_loop},
+                    Instruction::Reverse{idx} => {
+                        self.forwards = !self.forwards;
+                        self.ip = *idx;
+                        continue 'instruction_loop;
+                    }
+                    Instruction::Quit => break 'instruction_loop,
+                    Instruction::DebugPrint => self.debug_print(),
                 }
-                Instruction::Quit => break 'instruction_loop,
-                Instruction::DebugPrint => self.debug_print(),
+                
+                self.ip += 1;
             }
-            
-            self.scope_stack.last_mut().unwrap().ip += 1;
         }
     }
 
@@ -248,10 +257,18 @@ impl<'a> Interpreter<'a> {
         );
     }
 
+    pub fn end_call(&mut self) {
+        let scope = self.scope_stack.pop().unwrap();
+        self.code = scope.code;
+        self.consts = scope.consts;
+        self.registers = scope.registers;
+        self.ip = scope.ip + 1;
+        self.forwards = scope.forwards;
+    }
+
     #[inline]
     fn jump(&mut self, delta: isize) {
-        let scope = self.scope_stack.last_mut().unwrap();
-        scope.ip = ((scope.ip as isize) + delta) as usize;
+        self.ip = ((self.ip as isize) + delta) as usize;
     }
 
     #[inline]

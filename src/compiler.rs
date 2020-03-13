@@ -161,7 +161,8 @@ impl ST::StatementNode {
             ST::StatementNode::RefUnrefNode(valbox) => valbox.compile(),
             ST::StatementNode::IfNode(valbox) => valbox.compile(),
             ST::StatementNode::ModopNode(valbox) => valbox.compile(),
-            ST::StatementNode::CatchNode(valbox) => valbox.compile()
+            ST::StatementNode::CatchNode(valbox) => valbox.compile(),
+            ST::StatementNode::CallChainNode(valbox) => valbox.compile()
         }
     }
 }
@@ -174,11 +175,11 @@ impl ST::LetUnletNode {
             code.push_fwd(Instruction::FreeRegister{register: self.register});
 
             code.push_bkwd(Instruction::StoreRegister{register: self.register});
-            code.push_bkwd(Instruction::CopyVar);
+            code.push_bkwd(Instruction::UniqueVar);
             code.append_bkwd(self.rhs.compile());
         } else {
             code.append_fwd(self.rhs.compile());
-            code.push_fwd(Instruction::CopyVar);
+            code.push_fwd(Instruction::UniqueVar);
             code.push_fwd(Instruction::StoreRegister{register: self.register});
 
             code.push_bkwd(Instruction::FreeRegister{register: self.register});
@@ -285,6 +286,31 @@ impl ST::CatchNode {
     }
 }
 
+
+impl ST::CallUncallNode {
+    pub fn compile(&self) -> Code {        
+        let mut code = Code::new();
+        if self.is_uncall {
+            code.push_bkwd(Instruction::Call{idx: self.func_idx});
+            code.push_fwd(Instruction::Uncall{idx: self.func_idx});
+        } else {
+            code.push_fwd(Instruction::Call{idx: self.func_idx});
+            code.push_bkwd(Instruction::Uncall{idx: self.func_idx});
+        }
+        code
+    }
+}
+
+impl ST::CallChainNode {
+    pub fn compile(&self) -> Code {
+        let mut code = Code::new();
+        for call in self.calls.iter() {
+            code.extend(call.compile());
+        }
+        code
+    }
+}
+
 impl ST::FunctionNode {
     pub fn compile(&self, func_names: &Vec<String>) -> interpreter::Function {
         let mut code = Code::new();
@@ -302,10 +328,15 @@ impl ST::FunctionNode {
 
 impl ST::Module {
     pub fn compile(&self) -> interpreter::Module {
-        let func_names: Vec<String> = 
-            self.functions.iter().map(|f| f.name.clone()).collect();
-        interpreter::Module{
-            functions: self.functions.iter().map(|f| f.compile(&func_names)).collect()
+        let mut main_idx = None;
+        let mut func_names = Vec::with_capacity(self.functions.len());
+        for (i, f) in self.functions.iter().enumerate() {
+            func_names.push(f.name.clone());
+            if f.name == "main" {main_idx = Some(i)}
         }
+        let functions = self.functions.iter()
+                                      .map(|f| f.compile(&func_names))
+                                      .collect();
+        interpreter::Module{main_idx, functions}
     }
 }
