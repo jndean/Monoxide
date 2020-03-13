@@ -41,7 +41,8 @@ pub enum StatementNode {
     RefUnrefNode(Box<RefUnrefNode>),
     IfNode(Box<IfNode>),
     ModopNode(Box<ModopNode>),
-    CatchNode(Box<CatchNode>)
+    CatchNode(Box<CatchNode>),
+    CallChainNode(Box<CallChainNode>)
 }
 
 #[derive(Clone, Debug)]
@@ -78,6 +79,28 @@ pub struct CatchNode {
     pub expr: ExpressionNode
 }
 
+#[derive(Clone, Debug)]
+pub struct CallUncallNode {
+    pub is_uncall: bool,
+    pub func_idx: usize,
+    pub borrow_args: Vec<LookupNode>
+}
+
+#[derive(Clone, Debug)]
+pub struct CallChainNode {
+    pub calls: Vec<CallUncallNode>,
+    pub stolen_args: Vec<String>,
+    pub return_args: Vec<String>
+}
+
+
+#[derive(Clone, Debug, Default)]
+pub struct FunctionPrototype {
+    pub id: usize,
+    pub borrow_params: Vec<String>,
+    pub steal_params: Vec<String>,
+    pub return_params: Vec<String>
+}
 
 #[derive(Clone, Debug)]
 pub struct FunctionNode {
