@@ -294,6 +294,9 @@ impl ST::CallUncallNode {
             code.push_bkwd(Instruction::Call{idx: self.func_idx});
             code.push_fwd(Instruction::Uncall{idx: self.func_idx});
         } else {
+            for arg in self.borrow_args.iter().rev() {
+                code.append_fwd(arg.compile());
+            }
             code.push_fwd(Instruction::Call{idx: self.func_idx});
             code.push_bkwd(Instruction::Uncall{idx: self.func_idx});
         }
@@ -312,7 +315,7 @@ impl ST::CallChainNode {
 }
 
 impl ST::FunctionNode {
-    pub fn compile(&self, func_names: &Vec<String>) -> interpreter::Function {
+    pub fn compile(&self) -> interpreter::Function {
         let mut code = Code::new();
         for stmt in self.stmts.iter() {
             code.extend(stmt.compile());
@@ -321,7 +324,10 @@ impl ST::FunctionNode {
         interpreter::Function{
             consts: self.consts.clone(),
             code: Code::finalise(code),
-            num_registers: self.num_registers
+            num_registers: self.num_registers,
+            num_borrow: self.borrow_params.len(),
+            num_steal: self.steal_params.len(),
+            num_return: self.return_params.len()
         }
     }
 }
@@ -329,13 +335,11 @@ impl ST::FunctionNode {
 impl ST::Module {
     pub fn compile(&self) -> interpreter::Module {
         let mut main_idx = None;
-        let mut func_names = Vec::with_capacity(self.functions.len());
         for (i, f) in self.functions.iter().enumerate() {
-            func_names.push(f.name.clone());
             if f.name == "main" {main_idx = Some(i)}
         }
         let functions = self.functions.iter()
-                                      .map(|f| f.compile(&func_names))
+                                      .map(|f| f.compile())
                                       .collect();
         interpreter::Module{main_idx, functions}
     }

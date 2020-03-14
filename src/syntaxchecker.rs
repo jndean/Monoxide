@@ -48,14 +48,19 @@ pub struct SyntaxContext<'a> {
 
 
 impl<'a> SyntaxContext<'a> {
-    pub fn new(functions: &HashMap<String, ST::FunctionPrototype>) -> SyntaxContext {
-        SyntaxContext{
+    pub fn new(functions: &'a HashMap<String, ST::FunctionPrototype>,
+               borrows: &Vec<String>) -> SyntaxContext<'a> {
+        let mut ctx = SyntaxContext{
             functions,
             consts: Vec::new(),
             free_registers: Vec::new(),
             local_variables: HashMap::new(),
             num_registers: 0
+        };
+        for b in borrows {
+            ctx.create_variable(b);
         }
+        ctx
     }
 
     fn add_const(&mut self, val: interpreter::Variable) -> usize {
@@ -305,7 +310,8 @@ impl ST::CallChainNode {
 impl ST::FunctionNode {
     fn from(node: PT::FunctionNode, 
             func_lookup: &HashMap<String, ST::FunctionPrototype>) -> ST::FunctionNode {
-        let mut ctx = SyntaxContext::new(func_lookup);
+        let mut ctx = SyntaxContext::new(func_lookup, &node.borrow_params);
+
         ST::FunctionNode{
             name: node.name,
             borrow_params: node.borrow_params,
@@ -350,10 +356,12 @@ pub fn check_syntax(module: PT::Module) -> ST::Module{
     let mut func_prototypes = HashMap::new();
     
     for f in module.functions.iter() {
-        func_prototypes.insert(
+        if let Some(_) = func_prototypes.insert(
             f.name.clone(),
             ST::FunctionPrototype::from(&f, func_prototypes.len())
-        );
+        ) {
+            panic!("Duplicate function definition");
+        }
     }
 
     let functions = module.functions.into_iter()
