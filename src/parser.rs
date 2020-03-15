@@ -234,11 +234,11 @@ impl Parser {
     }
 
     
-    memoise!(module_ as module -> Module);
-    pub fn module_(&mut self) -> Option<Module> {
+    pub fn module(&mut self) -> Option<Module> {
 
         parse!(self;
             functions: self.repeat(Parser::function, false),
+            _end: self.expect_type("END_MARKER!"),
             {
                 return Some(Module{functions});
             }
@@ -320,9 +320,8 @@ impl Parser {
         if self.expect_literal("(") {
         let borrow_args = self.join(Parser::lookup, ",");
         if self.expect_literal(")") {
-        if self.expect_literal(";") {
             return Some(CallUncallNode{is_uncall, borrow_args, name: name.string_})
-        }}}};
+        }}};
 
         self.reset(pos);
         None
@@ -504,29 +503,6 @@ impl Parser {
                 )));
             }
         );
-        
-        /*
-        let pos = self.mark();
-        if let Some(name) = self.name() {
-        if self.expect_literal(":=") {
-        if let Some(rhs) = self.expression() {
-        if self.expect_literal(";") {
-            return Some(StatementNode::LetUnletNode(Box::new(
-                LetUnletNode{name, rhs, is_unlet: false}
-            )));
-        }}}};
-        self.reset(pos);
-
-        if let Some(name) = self.name() {
-        if self.expect_literal("=:") {
-        if let Some(rhs) = self.expression() {
-        if self.expect_literal(";") {
-            return Some(StatementNode::LetUnletNode(Box::new(
-                LetUnletNode{name, rhs, is_unlet: true}
-            )));
-        }}}};
-        self.reset(pos);
-        */
      
         None
     }

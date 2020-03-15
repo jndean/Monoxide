@@ -91,5 +91,10 @@ pub fn tokenise(data: &String) -> Vec<Token> {
         panic!("Unhandled input characters")
     }
 
+    ret.push(Token {
+        string_: String::from(""),
+        type_: String::from("END_MARKER!"),
+        line, col
+    });
     ret
 }
