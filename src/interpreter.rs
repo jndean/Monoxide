@@ -137,10 +137,7 @@ pub struct Scope<'a> {
 pub struct Function {
     pub code: Code,
     pub consts: Vec<Variable>,
-    pub num_registers: usize,
-    pub num_borrow: usize,
-    pub num_steal: usize,
-    pub num_return: usize
+    pub num_registers: usize
 }
 
 #[derive(Debug)]
@@ -257,9 +254,6 @@ impl<'a> Interpreter<'a> {
                 forwards  : replace(&mut self.forwards , forwards)
             }
         );
-        for i in 0..(func.num_borrow + func.num_steal) {
-            self.registers[i] = Some(self.pop_var());
-        }
     }
 
     pub fn end_call(&mut self) {

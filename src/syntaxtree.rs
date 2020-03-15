@@ -89,10 +89,9 @@ pub struct CallUncallNode {
 #[derive(Clone, Debug)]
 pub struct CallChainNode {
     pub calls: Vec<CallUncallNode>,
-    pub stolen_args: Vec<String>,
-    pub return_args: Vec<String>
+    pub stolen_args: Vec<usize>,
+    pub return_args: Vec<usize>
 }
-
 
 #[derive(Clone, Debug, Default)]
 pub struct FunctionPrototype {
@@ -104,17 +103,17 @@ pub struct FunctionPrototype {
 
 #[derive(Clone, Debug)]
 pub struct FunctionNode {
-    pub name: String,
     pub stmts: Vec<StatementNode>,
     pub consts: Vec<interpreter::Variable>,
     pub num_registers: usize,
 
-    pub borrow_params: Vec<String>,
-    pub steal_params: Vec<String>,
-    pub return_params: Vec<String>,
+    pub borrow_registers: Vec<usize>,
+    pub steal_registers: Vec<usize>,
+    pub return_registers: Vec<usize>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Module {
-    pub functions: Vec<FunctionNode>
+    pub functions: Vec<FunctionNode>,
+    pub main_idx: Option<usize>
 }

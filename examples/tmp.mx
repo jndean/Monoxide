@@ -1,12 +1,10 @@
 
 fn main()() {
-    x := [5];
-    y := &x[0];
-    F(y);
+    x := 0;
+    y := 1;
+    x,y => swap() => x,y;
 } ~main()
 
-fn F(X)() {
-
-    X -= 4;
-
-} ~F()
+fn swap()(x, y) {
+    
+} ~swap(y, x)

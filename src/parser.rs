@@ -290,26 +290,50 @@ impl Parser {
         if let Some(stmt) = self.catch_stmt() {return Some(stmt);}
         if let Some(stmt) = self.call_stmt() {return Some(stmt);}
         None
-    }
+    }  
 
 
     memoise!(call_stmt_ as call_stmt -> StatementNode);
     pub fn call_stmt_(&mut self) -> Option<StatementNode> {
         let pos = self.mark();
 
+        let stolen = self.stolen_args();
         if let Some(calluncall) = self.calluncall_block() {
+        let returned = self.return_args();
+        if self.expect_literal(";") {
             return Some(StatementNode::CallChainNode(Box::new(
                 CallChainNode{
                     calls: vec![calluncall],
-                    stolen_args: Vec::new(),
-                    return_args: Vec::new(),
+                    stolen_args: stolen,
+                    return_args: returned,
                 }
             )))
-        }
+        }}
 
         self.reset(pos);
         None
     }
+
+    pub fn stolen_args(&mut self) -> Vec<String> {
+        let pos = self.mark();
+        let args = self.join(Parser::name, ",");
+        if self.expect_literal("=>") {
+            return args;
+        }
+        self.reset(pos);
+        Vec::new()
+    }
+
+    pub fn return_args(&mut self) -> Vec<String> {
+        let pos = self.mark();
+        if self.expect_literal("=>") {
+            let args = self.join(Parser::name, ",");
+            return args;
+        }
+        self.reset(pos);
+        Vec::new()
+    }
+    
 
     memoise!(calluncall_block_ as calluncall_block -> CallUncallNode);
     pub fn calluncall_block_(&mut self) -> Option<CallUncallNode> {

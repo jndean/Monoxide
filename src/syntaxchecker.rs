@@ -48,19 +48,27 @@ pub struct SyntaxContext<'a> {
 
 
 impl<'a> SyntaxContext<'a> {
-    pub fn new(functions: &'a HashMap<String, ST::FunctionPrototype>,
-               borrows: &Vec<String>) -> SyntaxContext<'a> {
-        let mut ctx = SyntaxContext{
+    pub fn new(functions: &'a HashMap<String, ST::FunctionPrototype>) -> SyntaxContext<'a> {
+        SyntaxContext{
             functions,
             consts: Vec::new(),
             free_registers: Vec::new(),
             local_variables: HashMap::new(),
             num_registers: 0
-        };
-        for b in borrows {
-            ctx.create_variable(b);
         }
-        ctx
+    }
+
+    fn init_func(&mut self, borrows: &Vec<String>, steals: &Vec<String>) 
+                 -> (Vec<usize>, Vec<usize>) {
+        //TODO: create_variable is not the write thing to use //
+        let borrows = borrows.iter().map(|name| self.create_variable(name)).collect();
+        let steals = steals.iter().map(|name| self.create_variable(name)).collect();
+        (borrows, steals)
+    }
+
+    fn end_func(&mut self, returns: &Vec<String>) -> Vec<usize> {
+        //TODO: create_variable is not the write thing to use //
+        returns.iter().map(|name| self.lookup_local(name)).collect()
     }
 
     fn add_const(&mut self, val: interpreter::Variable) -> usize {
@@ -297,27 +305,39 @@ impl ST::CallUncallNode {
 
 impl ST::CallChainNode {
     fn from(node: PT::CallChainNode, ctx: &mut SyntaxContext) -> ST::CallChainNode {
-        ST::CallChainNode{
-            calls: node.calls.into_iter()
-                             .map(|c| ST::CallUncallNode::from(c, ctx))
-                             .collect(),
-            stolen_args: node.stolen_args,
-            return_args: node.return_args
+        let mut stolen_args = Vec::with_capacity(node.stolen_args.len());
+        for arg in node.stolen_args.into_iter() {
+            stolen_args.push(ctx.lookup_local(&arg));
+            ctx.local_variables.remove(&arg);
         }
+        let calls = node.calls.into_iter()
+                              .map(|c| ST::CallUncallNode::from(c, ctx))
+                              .collect();                  
+        let mut return_args = Vec::with_capacity(node.return_args.len());
+        for arg in node.return_args.into_iter() {
+            return_args.push(ctx.create_variable(&arg));
+            // TODO: Using create variable is WRONG
+        }
+        ST::CallChainNode{calls, stolen_args, return_args}
     }
 }
 
 impl ST::FunctionNode {
-    fn from(node: PT::FunctionNode, 
-            func_lookup: &HashMap<String, ST::FunctionPrototype>) -> ST::FunctionNode {
-        let mut ctx = SyntaxContext::new(func_lookup, &node.borrow_params);
+    fn from(
+        node: PT::FunctionNode, 
+        func_lookup: &HashMap<String, ST::FunctionPrototype>
+    ) -> ST::FunctionNode {
+
+        let mut ctx = SyntaxContext::new(func_lookup);
+        let (borrow_registers, steal_registers) = ctx.init_func(&node.borrow_params,
+                                                                &node.steal_params);
+        let stmts = node.stmts.into_iter()
+                              .map(|s| ST::StatementNode::from(s, &mut ctx))
+                              .collect();
+        let return_registers = ctx.end_func(&node.return_params);
 
         ST::FunctionNode{
-            name: node.name,
-            borrow_params: node.borrow_params,
-            steal_params: node.steal_params,
-            return_params: node.return_params,
-            stmts: node.stmts.into_iter().map(|s| ST::StatementNode::from(s, &mut ctx)).collect(),
+            stmts, borrow_registers, steal_registers, return_registers,
             consts: ctx.consts,
             num_registers: ctx.num_registers
         }
@@ -356,16 +376,21 @@ pub fn check_syntax(module: PT::Module) -> ST::Module{
     let mut func_prototypes = HashMap::new();
     
     for f in module.functions.iter() {
-        if let Some(_) = func_prototypes.insert(
+        if func_prototypes.insert(
             f.name.clone(),
             ST::FunctionPrototype::from(&f, func_prototypes.len())
-        ) {
+        ).is_some() {
             panic!("Duplicate function definition");
         }
     }
 
-    let functions = module.functions.into_iter()
-                                    .map(|f| ST::FunctionNode::from(f, &func_prototypes))
-                                    .collect();
-    ST::Module{functions}
+    let mut main_idx = None;
+    let mut functions = Vec::with_capacity(module.functions.len());
+
+    for (i, f) in module.functions.into_iter().enumerate() {
+        if f.name == "main" {main_idx = Some(i)}
+        functions.push(ST::FunctionNode::from(f, &func_prototypes));
+    }
+
+    ST::Module{functions, main_idx}
 }

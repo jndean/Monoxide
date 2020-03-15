@@ -307,9 +307,20 @@ impl ST::CallUncallNode {
 impl ST::CallChainNode {
     pub fn compile(&self) -> Code {
         let mut code = Code::new();
+
+        for &register in self.stolen_args.iter().rev() {
+            code.push_fwd(Instruction::LoadRegister{register});
+            code.push_fwd(Instruction::FreeRegister{register});
+        }
+
         for call in self.calls.iter() {
             code.extend(call.compile());
         }
+
+        for &register in self.return_args.iter().rev() {
+            code.push_fwd(Instruction::StoreRegister{register});
+        }
+
         code
     }
 }
@@ -317,30 +328,37 @@ impl ST::CallChainNode {
 impl ST::FunctionNode {
     pub fn compile(&self) -> interpreter::Function {
         let mut code = Code::new();
-        for stmt in self.stmts.iter() {
+
+        for &register in &self.borrow_registers {
+            code.push_fwd(Instruction::StoreRegister{register});
+        }
+        for &register in &self.steal_registers {
+            code.push_fwd(Instruction::StoreRegister{register});
+        }
+
+        for stmt in &self.stmts {
             code.extend(stmt.compile());
+        }
+
+        for &register in &self.return_registers {
+            code.push_fwd(Instruction::LoadRegister{register});
         }
 
         interpreter::Function{
             consts: self.consts.clone(),
             code: Code::finalise(code),
-            num_registers: self.num_registers,
-            num_borrow: self.borrow_params.len(),
-            num_steal: self.steal_params.len(),
-            num_return: self.return_params.len()
+            num_registers: self.num_registers
         }
     }
 }
 
 impl ST::Module {
     pub fn compile(&self) -> interpreter::Module {
-        let mut main_idx = None;
-        for (i, f) in self.functions.iter().enumerate() {
-            if f.name == "main" {main_idx = Some(i)}
+        interpreter::Module{
+            main_idx: self.main_idx,
+            functions: self.functions.iter()
+                                     .map(|f| f.compile())
+                                     .collect()
         }
-        let functions = self.functions.iter()
-                                      .map(|f| f.compile())
-                                      .collect();
-        interpreter::Module{main_idx, functions}
     }
 }
