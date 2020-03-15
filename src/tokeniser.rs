@@ -15,7 +15,8 @@ pub fn tokenise(data: &String) -> Vec<Token> {
 
     let name_regex = regex::Regex::new(r"^[a-zA-Z_][a-zA-Z_0-9\.]*").unwrap();
     let number_regex = regex::Regex::new(r"^\d+(/\d+)?").unwrap();
-    let ignore_regex = regex::Regex::new(r"^(([$][^$]*[$])|([ \t\r\n\f\v]+))").unwrap();
+    let ignore_regex = regex::Regex::new(r"^(([$][^$]*[$])|([ \t\r\f\v]+))").unwrap();
+    let newline_regex = regex::Regex::new(r"^\n").unwrap();
     let symbol_regex = regex::Regex::new(&(String::from(r"^(")
     + r"\+=|\-=|\*=|/="
     + r"|<=|>=|!=|=="
@@ -33,10 +34,9 @@ pub fn tokenise(data: &String) -> Vec<Token> {
     while pos < data.len() {
         
         if let Some(m) = name_regex.find(&data[pos..]) {
-            let string_ = &data[pos .. pos + m.end()];
             ret.push(Token{
                 type_: String::from("NAME"), 
-                string_: String::from(string_),
+                string_: String::from(&data[pos .. pos + m.end()]),
                 line, col
             });
             pos += m.end();
@@ -45,10 +45,9 @@ pub fn tokenise(data: &String) -> Vec<Token> {
         };
 
         if let Some(m) = symbol_regex.find(&data[pos..]) {
-            let string_ = &data[pos .. pos + m.end()];
             ret.push(Token{
                 type_: String::from("SYMBOL"), 
-                string_: String::from(string_),
+                string_: String::from(&data[pos .. pos + m.end()]),
                 line, col
             });
             pos += m.end();
@@ -56,37 +55,30 @@ pub fn tokenise(data: &String) -> Vec<Token> {
             continue;
         };
         
-        match number_regex.find(&data[pos..]) {
-            Some(m) => {
-                ret.push(Token{
-                    type_: String::from("NUMBER"), 
-                    string_: String::from(&data[pos .. pos + m.end()]),
-                    line, col
-                });
-                pos += m.end();
-                col += m.end();
-                continue;
-            }
-            None => ()
-        };
+        if let Some(m) =  number_regex.find(&data[pos..]) {
+            ret.push(Token{
+                type_: String::from("NUMBER"), 
+                string_: String::from(&data[pos .. pos + m.end()]),
+                line, col
+            });
+            pos += m.end();
+            col += m.end();
+            continue;
+        }
 
-        match ignore_regex.find(&data[pos..]) {
-            Some(m) => {
-                pos += m.end();
-                let mut matches: Vec<(usize, &str)> = 
-                    data[m.start()..m.end()].match_indices(r"\n").collect();
-                line += matches.len();
-                if matches.len() > 0 {
-                    let lastpos = matches.pop().unwrap().0;
-                    col = m.end() - lastpos;
-                } else {
-                    col += m.end();
-                }
-                continue;
-            }
-            None => ()
-        };
+        if let Some(m) = ignore_regex.find(&data[pos..]) {
+            pos += m.end();
+            col += m.end();
+            continue;
+        }
 
+        if let Some(m) = newline_regex.find(&data[pos..]) {
+            pos += m.end();
+            line += 1;
+            col = 0;
+            continue;
+        }
+        
         println!("pos {}", pos);
         panic!("Unhandled input characters")
     }

@@ -1,4 +1,4 @@
-
+use std::cmp;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -15,7 +15,15 @@ use crate::interpreter::{Fraction, Instruction};
 pub struct Parser {
     tokens: Vec<Token>,
     token_pos: usize,
+    max_token_pos: usize,
     memo: HashMap<(usize, String), (usize, Parsed)>
+}
+
+#[derive(Debug)]
+pub struct ParseError {
+    filename: String,
+    line: usize,
+    col: usize
 }
 
 type VecStatementNode = Vec<StatementNode>;
@@ -157,9 +165,17 @@ macro_rules! memoise_recursive {
 }
 
 
-pub fn parse(tokens: Vec<Token>) -> Option<Module>{
-    let mut parser = Parser{tokens, token_pos: 0, memo: HashMap::new()};
-    return parser.module();
+pub fn parse(tokens: Vec<Token>) -> Result<Module, ParseError>{
+    let mut parser = Parser{tokens, token_pos: 0, max_token_pos: 0, memo: HashMap::new()};
+    if let Some(module) = parser.module() {
+        return Ok(module);
+    }
+    let max_token = parser.max_token();
+    Err(ParseError{
+        filename: String::from("Filename not implemented"),
+        line: max_token.line,
+        col: max_token.col
+    })
 }
 
 
@@ -171,12 +187,18 @@ impl Parser {
 
     fn reset(&mut self, pos: usize) {
         self.token_pos = pos;
+        self.max_token_pos = cmp::max(pos, self.max_token_pos);
+    }
+
+    fn max_token(&self) -> Token {
+        self.tokens[self.max_token_pos].clone()
     }
 
     fn expect_literal(&mut self, value: &str) -> bool {
-        if let Some(tokenref) =  self.tokens.get(self.token_pos).as_ref() {
+        let pos = self.mark();
+        if let Some(tokenref) =  self.tokens.get(pos).as_ref() {
             if tokenref.string_ == value {
-                self.token_pos += 1;
+                self.reset(pos + 1);
                 return true;
             };
         };
@@ -184,10 +206,12 @@ impl Parser {
     }
 
     fn expect_type(&mut self, type_: &str) -> Option<Token> {
-        if let Some(tokenref) =  self.tokens.get(self.token_pos).as_ref() {
+        let pos = self.mark();
+        if let Some(tokenref) =  self.tokens.get(pos).as_ref() {
             if tokenref.type_ == type_ {
-                self.token_pos += 1;
-                return Some((*tokenref).clone());
+                let result = Some((*tokenref).clone());
+                self.reset(pos + 1);
+                return result;
             }
         }
         None
