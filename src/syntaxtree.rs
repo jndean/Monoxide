@@ -93,12 +93,22 @@ pub struct CallChainNode {
     pub return_args: Vec<usize>
 }
 
+
+#[derive(Clone, Debug)]
+pub struct ParamLink {
+    pub is_interior: bool,
+    pub link: Option<String>,  // None if unbound link //
+    pub linked_borrow: Option<usize>,
+    pub linked_io: Option<usize>,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct FunctionPrototype {
     pub id: usize,
-    pub borrow_params: Vec<String>,
-    pub steal_params: Vec<String>,
-    pub return_params: Vec<String>
+    pub owned_link_groups: Vec<[Vec<usize>; 3]>,
+    pub borrow_params: Vec<Option<ParamLink>>,
+    pub steal_params: Vec<Option<ParamLink>>,
+    pub return_params: Vec<Option<ParamLink>>
 }
 
 #[derive(Clone, Debug)]

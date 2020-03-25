@@ -7,7 +7,7 @@ use crate::parsetree::{
     StatementNode, ExpressionNode, LookupNode, LetUnletNode,
     FractionNode, BinopNode, IfNode, ModopNode, FunctionNode,
     CatchNode, ArrayLiteralNode, Module, RefUnrefNode, CallUncallNode,
-    CallChainNode
+    CallChainNode, FunctionParam
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -41,6 +41,7 @@ pub enum Parsed {
     CallUncallNode(Option<CallUncallNode>),
     CallChainNode(Option<CallChainNode>),
     FunctionNode(Option<FunctionNode>),
+    FunctionParam(Option<FunctionParam>),
     ArrayLiteralNode(Option<ArrayLiteralNode>),
     Module(Option<Module>)
 }
@@ -277,11 +278,12 @@ impl Parser {
 
         if self.expect_literal("fn") {
         if let Some(name) = self.name() {
+        let owned_links = self.links();
         if self.expect_literal("(") {
-        let borrow_params = self.join(Parser::name, ",");
+        let borrow_params = self.join(Parser::function_param, ",");
         if self.expect_literal(")") {
         if self.expect_literal("(") {
-        let steal_params = self.join(Parser::name, ",");
+        let steal_params = self.join(Parser::function_param, ",");
         if self.expect_literal(")") {
         if self.expect_literal("{") {
         if let Some(stmts) = self.statements() {
@@ -289,16 +291,28 @@ impl Parser {
         if self.expect_literal("~") {
         if self.name() == Some(name.clone()) {
         if self.expect_literal("(") {
-        let return_params = self.join(Parser::name, ",");
+        let return_params = self.join(Parser::function_param, ",");
         if self.expect_literal(")") {
             return Some(FunctionNode{
-                name, borrow_params, steal_params, return_params, stmts
+                name, owned_links, borrow_params, steal_params, return_params, stmts
             });
         }}}}}}}}}}}}};
 
         self.reset(pos);
         None
     }
+
+    pub fn links(&mut self) -> Vec<String> {
+        let pos = self.mark();
+        if self.expect_literal("<") {
+        let links = self.join(Parser::name, ",");
+        if self.expect_literal(">") {
+            return links;
+        }}
+        self.reset(pos);
+        Vec::new()
+    }
+
 
     memoise!(statements_ as statements -> VecStatementNode);
     pub fn statements_(&mut self) -> Option<Vec<StatementNode>> {
@@ -333,6 +347,27 @@ impl Parser {
                 }
             )))
         }}
+
+        self.reset(pos);
+        None
+    }
+
+    memoise!(function_param_ as function_param -> FunctionParam);
+    pub fn function_param_(&mut self) -> Option<FunctionParam> {
+        let pos = self.mark();
+
+        if self.expect_literal("&") {
+            if let Some(token) = self.expect_type("NAME") {
+                if let Some(name) = self.name() {
+                    let link = Some(token.string_);
+                    return Some(FunctionParam{name, link, is_ref: true});
+                } else {
+                    return Some(FunctionParam{name: token.string_, is_ref: true, link: None});
+                }
+            }
+        } else if let Some(name) = self.name() {
+            return Some(FunctionParam{name, is_ref: false, link: None});
+        }
 
         self.reset(pos);
         None

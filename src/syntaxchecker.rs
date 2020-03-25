@@ -1,6 +1,7 @@
 
 use std::collections::{HashSet, HashMap};
 use std::cell::RefCell;
+use std::iter::FromIterator;
 use std::rc::Rc;
 
 use crate::interpreter;
@@ -17,17 +18,19 @@ pub struct Variable {
 #[derive(Debug)]
 pub struct Reference {
     is_interior: bool,
+    is_borrowed: bool,
     register: usize,
     var: Rc<Variable>
 }
 
 impl Reference {
-    fn new(name: String, register: usize, is_interior: bool) -> Reference {
+    fn new(name: String, register: usize, is_borrowed: bool) -> Reference {
         let mut exteriors = HashSet::new();
         exteriors.insert(name);
         Reference {
-            is_interior,
+            is_interior: false,
             register,
+            is_borrowed,
             var: Rc::new(Variable{
                 exteriors: RefCell::new(exteriors),
                 interiors: RefCell::new(HashSet::new())
@@ -58,17 +61,112 @@ impl<'a> SyntaxContext<'a> {
         }
     }
 
-    fn init_func(&mut self, borrows: &Vec<String>, steals: &Vec<String>) 
-                 -> (Vec<usize>, Vec<usize>) {
-        //TODO: create_variable is not the write thing to use //
-        let borrows = borrows.iter().map(|name| self.create_variable(name)).collect();
-        let steals = steals.iter().map(|name| self.create_variable(name)).collect();
-        (borrows, steals)
+    fn init_func(
+        &mut self,
+        owned_links_raw: Vec<String>, 
+        borrows: Vec<PT::FunctionParam>,
+        steals: Vec<PT::FunctionParam>
+    ) -> (HashMap<String, Rc<Variable>>, Vec<usize>, Vec<usize>) {
+
+        // Check links //
+        let mut owned_links = HashSet::new();
+        for link in owned_links_raw {
+            let link = exterior_link_name(&link);
+            if owned_links.insert(link) { 
+                panic!("Duplicate owned links")
+            };
+        }
+        
+        let mut linked: HashMap<String, Rc<Variable>> = HashMap::new();
+
+        // Init borrowed params //
+        let mut borrow_registers = Vec::with_capacity(borrows.len());
+        let mut steal_registers = Vec::with_capacity(steals.len());
+        for (params, registers) in vec![(borrows, &mut borrow_registers), (steals, &mut steal_registers)] {
+            for p in params {    
+                if self.local_variables.contains_key(&p.name) {
+                    panic!("Duplicate function parameter names");
+                };        
+                let register = self.get_free_register();
+                registers.push(register);
+
+                if !p.is_ref {
+                    // Singly owned //
+                    self.local_variables.insert(
+                        p.name.clone(),
+                        Reference::new(p.name, register, true)
+                    );
+                } else if let Some(link) = p.link {
+                    let is_interior = is_interior_link(&link);
+                    let ext_link = exterior_link_name(&link);
+                    match linked.get(&ext_link) {
+                        Some(var) => {
+                            // Existing link name //
+                            if is_interior {var.interiors.borrow_mut().insert(p.name.clone())}
+                            else           {var.exteriors.borrow_mut().insert(p.name.clone())};
+                            self.local_variables.insert(
+                                p.name,
+                                Reference{is_interior, register, is_borrowed: true, var: Rc::clone(var)}
+                            );
+                        },
+                        None => {
+                            let (mut interiors, mut exteriors) = (HashSet::new(), HashSet::new());
+                            if is_interior {interiors.insert(p.name.clone())}
+                            else           {exteriors.insert(p.name.clone())};
+                            if !owned_links.contains(&ext_link) {
+                                // Unowned link group, insert a dummy interior link to prevent reshapes //
+                                interiors.insert(String::from("caller anchor"));
+                            }
+                            let var = Rc::new(Variable{
+                                exteriors: RefCell::new(exteriors),
+                                interiors: RefCell::new(interiors),
+                            });
+                            linked.insert(ext_link, Rc::clone(&var));
+                            self.local_variables.insert(
+                                p.name,
+                                Reference{is_interior, register, is_borrowed: true, var}
+                            );
+                        }
+                    }
+
+                } else {
+                    // Unbound ref //
+                    let varref = Reference::new(p.name.clone(), register, true);
+                    varref.var.interiors.borrow_mut().insert(String::from("calling scope"));
+                    self.local_variables.insert(p.name, varref); 
+                }
+            }
+        }
+
+        // Still need to check all the owned link groups have an exterior ref //
+
+        (linked, borrow_registers, steal_registers)
     }
 
-    fn end_func(&mut self, returns: &Vec<String>) -> Vec<usize> {
-        //TODO: create_variable is not the write thing to use //
-        returns.iter().map(|name| self.lookup_local(name)).collect()
+    fn end_func(
+        &mut self,
+        input_links: HashMap<String, Rc<Variable>>,
+        returns: Vec<PT::FunctionParam>
+    ) -> Vec<usize> {
+        // Check the links to input variables are valid //
+        let mut return_registers = Vec::with_capacity(returns.len());
+
+        for p in returns {
+            let reference = self.local_variables.get(&p.name).expect(
+                "Returning non-existant variable");
+            return_registers.push(reference.register);
+
+            if let Some(link) = p.link {
+                let ext_link = exterior_link_name(&link);
+                if let Some(linked_var) = input_links.get(&ext_link) {
+                    if !Rc::ptr_eq(&reference.var, linked_var) {
+                        panic!("Wrong reference link group on returned variable");
+                    }
+                }
+            }
+        }
+
+        return_registers
     }
 
     fn add_const(&mut self, val: interpreter::Variable) -> usize {
@@ -125,7 +223,7 @@ impl<'a> SyntaxContext<'a> {
         
         let (is_interior, mut register, var) = match self.local_variables.get(&lookup.name) {
             None => panic!("Referencing a non-existant variable"),
-            Some(Reference{is_interior, register, var}) => {
+            Some(Reference{is_interior, register, var, ..}) => {
                 (*is_interior || lookup.indices.len() > 0, *register, Rc::clone(var))
             }
         };
@@ -138,7 +236,7 @@ impl<'a> SyntaxContext<'a> {
     
         self.local_variables.insert(
             name.to_string(),
-            Reference{is_interior, register, var}
+            Reference{is_interior, register, var, is_borrowed: false}
         );
         register
     }
@@ -148,7 +246,8 @@ impl<'a> SyntaxContext<'a> {
 
         match self.local_variables.remove(name) {
             None => panic!("Removing non-existant reference"),
-            Some(Reference{is_interior, register, var}) => {
+            Some(Reference{is_borrowed: true, ..}) => panic!("Removing borrowed reference"),
+            Some(Reference{is_interior, register, var, ..}) => {
                 let is_interior = is_interior || lookup.indices.len() > 0;
                 
                 // Check the other name is a shared ref
@@ -160,7 +259,6 @@ impl<'a> SyntaxContext<'a> {
                         if !ok { panic!("Unreferencing using incorrect variable") };
                     }
                 }
-
                 // Deref
                 var.interiors.borrow_mut().remove(name);
                 var.exteriors.borrow_mut().remove(name);
@@ -172,6 +270,7 @@ impl<'a> SyntaxContext<'a> {
     fn remove_variable(&mut self, name: &str) -> usize {
         match self.local_variables.remove(name) {
             None => panic!("Uninitialising non-existant variable"),
+            Some(Reference{is_borrowed: true, ..}) => panic!("Uninitialising borrowed variable"),
             Some(Reference{var, register, ..}) => {
                 if !var.interiors.borrow().is_empty() 
                         || var.exteriors.borrow().len() > 1 {
@@ -329,12 +428,12 @@ impl ST::FunctionNode {
     ) -> ST::FunctionNode {
 
         let mut ctx = SyntaxContext::new(func_lookup);
-        let (borrow_registers, steal_registers) = ctx.init_func(&node.borrow_params,
-                                                                &node.steal_params);
+        let (link_set, borrow_registers, steal_registers) = ctx.init_func(
+            node.owned_links, node.borrow_params, node.steal_params);
         let stmts = node.stmts.into_iter()
                               .map(|s| ST::StatementNode::from(s, &mut ctx))
                               .collect();
-        let return_registers = ctx.end_func(&node.return_params);
+        let return_registers = ctx.end_func(link_set, node.return_params);
 
         ST::FunctionNode{
             stmts, borrow_registers, steal_registers, return_registers,
@@ -346,14 +445,76 @@ impl ST::FunctionNode {
 
 impl ST::FunctionPrototype {
     fn from(function: &PT::FunctionNode, id: usize) -> ST::FunctionPrototype {
+
+        let mut linked_borrows = HashMap::new();
+        let mut owned_link_groups = HashMap::new();
+        for name in &function.owned_links {
+            owned_link_groups.insert(
+                name.clone(), [Vec::new(), Vec::new(), Vec::new()]);
+        }
+
+        fn process_params(
+            params: &Vec<PT::FunctionParam>,
+            linked_borrows: &mut HashMap<String, usize>,
+            owned_link_groups: &mut HashMap<String, [Vec<usize>; 3]>,
+            is_io: bool,
+            link_group_type: usize,
+        ) -> Vec<Option<ST::ParamLink>> {
+
+            let mut out_vec = Vec::new();
+            let mut self_links = HashMap::new();
+            for (idx, param) in params.iter().enumerate() {
+                out_vec.push(
+                    param.link.clone().map(|link| {
+                        let ext_name = exterior_link_name(&link);
+                        let linked_borrow = linked_borrows.get(&ext_name).map(|x|*x);
+                        if !is_io {linked_borrows.insert(ext_name.clone(), idx);};
+                        let linked_io = if is_io {
+                            let res = self_links.get(&ext_name).map(|x|*x);
+                            self_links.insert(ext_name.clone(), idx);
+                            res
+                        } else {None};
+                        if let Some(groups) = owned_link_groups.get_mut(&ext_name) {
+                            groups[link_group_type].push(idx);
+                        };
+
+                        Some(ST::ParamLink {
+                            is_interior: is_interior_link(&link),
+                            link: Some(ext_name),
+                            linked_borrow, linked_io
+                        })
+                    }).flatten()
+                );
+            };
+            out_vec
+        };
+
+        let borrow_params = process_params(
+            &function.borrow_params,
+            &mut linked_borrows,
+            &mut owned_link_groups,
+            false, 0);
+
+        let steal_params = process_params(
+            &function.steal_params,
+            &mut linked_borrows,
+            &mut owned_link_groups,
+            true, 1);
+            
+        let return_params = process_params(
+            &function.return_params,
+            &mut linked_borrows,
+            &mut owned_link_groups,
+            true, 2);
+
+        let owned_link_groups = owned_link_groups.into_iter().map(|(_, v)| v).collect();
+
         ST::FunctionPrototype{
-            id,
-            borrow_params: function.borrow_params.clone(),
-            steal_params: function.steal_params.clone(),
-            return_params: function.return_params.clone()
+            id, borrow_params, steal_params, return_params, owned_link_groups
         }
     }
 }
+
 
 impl ST::StatementNode {
     fn from(node: PT::StatementNode, ctx: &mut SyntaxContext) -> ST::StatementNode {
@@ -384,6 +545,9 @@ pub fn check_syntax(module: PT::Module) -> ST::Module{
         }
     }
 
+    println!("{:#?}", func_prototypes);
+    panic!("here");
+
     let mut main_idx = None;
     let mut functions = Vec::with_capacity(module.functions.len());
 
@@ -393,4 +557,17 @@ pub fn check_syntax(module: PT::Module) -> ST::Module{
     }
 
     ST::Module{functions, main_idx}
+}
+
+
+fn exterior_link_name(link_name: &str) -> String {
+    let mut c = link_name.chars();
+    match c.next() {
+        None => panic!("Empty link name?"),
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+    }
+}
+
+fn is_interior_link(link_name: &String) -> bool {
+    char::is_lowercase(link_name.chars().next().expect("Empty link name?"))
 }

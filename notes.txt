@@ -75,13 +75,12 @@ X => Y;
 
 REQUIREMENTS
 - X and Y are different vars
-- X is not an interior ref
-- Pull requirements?
+- X is singly owned
+- Y has no _other_ interior references?
 
 ACTIONS
 - X var is pushed onto Y var
 - Name X is freed
-- All other exerior refs to X become interior refs to Y?
 
 ---------- BACKWARDS ----------
 
@@ -161,3 +160,29 @@ fn F<A>(&A X){
 
 Chevron notation before the args denotes any labels that are owned by the function.
 The caller must pass all references to the function. The function may reshape vars.
+
+
+#####################
+## Syntax checking ##
+#####################
+
+# ST. Function caller. #
+Create returned values
+Link steal/return values to borrowed values
+Check owned groups have an exterior ref
+Check singly owned params are singly owned
+Check two inputs of the same var share a link group.
+Check interior links aren't passed as exteriors.
+Check owned link groups take all the refs to a var
+
+# ST. Function Prototype #
+Link return/stolen refs to borrowed refs
+Mark singly owned
+Store link group, store is_interior
+Mark 
+
+enum IOParam {
+   Single,
+   UnboundLink(Option<usize>, Option<usize>, String)
+   BoundLink(Option<usize>, Option<usize>, String)
+}

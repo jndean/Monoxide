@@ -30,7 +30,7 @@ fn reshape2D()() {
 
 } ~reshape2D()
 
-fn myfunc(&ab grid, width, height, &a col1, &b col2)() {
+fn myfunc(&G grid, width, height, &g col1, &g col2)() {
 
 } ~myfunc();
 

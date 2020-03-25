@@ -101,11 +101,19 @@ pub struct CallChainNode {
 }
 
 #[derive(Clone, Debug)]
+pub struct FunctionParam {
+    pub name: String,
+    pub is_ref: bool,
+    pub link: Option<String>
+}
+
+#[derive(Clone, Debug)]
 pub struct FunctionNode {
     pub name: String,
-    pub borrow_params: Vec<String>,
-    pub steal_params: Vec<String>,
-    pub return_params: Vec<String>,
+    pub owned_links: Vec<String>,
+    pub borrow_params: Vec<FunctionParam>,
+    pub steal_params: Vec<FunctionParam>,
+    pub return_params: Vec<FunctionParam>,
     pub stmts: Vec<StatementNode>
 }
 
