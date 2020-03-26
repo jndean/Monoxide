@@ -464,27 +464,31 @@ impl ST::FunctionPrototype {
             let mut out_vec = Vec::new();
             let mut self_links = HashMap::new();
             for (idx, param) in params.iter().enumerate() {
-                out_vec.push(
-                    param.link.clone().map(|link| {
-                        let ext_name = exterior_link_name(&link);
-                        let linked_borrow = linked_borrows.get(&ext_name).map(|x|*x);
-                        if !is_io {linked_borrows.insert(ext_name.clone(), idx);};
-                        let linked_io = if is_io {
-                            let res = self_links.get(&ext_name).map(|x|*x);
-                            self_links.insert(ext_name.clone(), idx);
-                            res
-                        } else {None};
-                        if let Some(groups) = owned_link_groups.get_mut(&ext_name) {
-                            groups[link_group_type].push(idx);
-                        };
+                let mut param_link = param.link.clone().map(|link| {
+                    let ext_name = exterior_link_name(&link);
+                    let linked_borrow = linked_borrows.get(&ext_name).map(|x|*x);
+                    if !is_io {linked_borrows.insert(ext_name.clone(), idx);};
+                    let linked_io = if is_io {
+                        let res = self_links.get(&ext_name).map(|x|*x);
+                        self_links.insert(ext_name.clone(), idx);
+                        res
+                    } else {None};
+                    if let Some(groups) = owned_link_groups.get_mut(&ext_name) {
+                        groups[link_group_type].push(idx);
+                    };
 
-                        Some(ST::ParamLink {
-                            is_interior: is_interior_link(&link),
-                            link: Some(ext_name),
-                            linked_borrow, linked_io
-                        })
-                    }).flatten()
-                );
+                    Some(ST::ParamLink {
+                        is_interior: is_interior_link(&link),
+                        link: Some(ext_name),
+                        linked_borrow, linked_io
+                    })
+                }).flatten();
+                if param_link.is_none() && param.is_ref {
+                    param_link = Some(ST::ParamLink{
+                        is_interior: true, link: None, linked_borrow: None, linked_io: None
+                    });
+                }
+                out_vec.push(param_link);
             };
             out_vec
         };
@@ -545,7 +549,7 @@ pub fn check_syntax(module: PT::Module) -> ST::Module{
         }
     }
 
-    println!("{:#?}", func_prototypes);
+    println!("PROTOTYPES {:#?}", func_prototypes);
     panic!("here");
 
     let mut main_idx = None;
