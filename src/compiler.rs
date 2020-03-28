@@ -162,7 +162,7 @@ impl ST::StatementNode {
             ST::StatementNode::IfNode(valbox) => valbox.compile(),
             ST::StatementNode::ModopNode(valbox) => valbox.compile(),
             ST::StatementNode::CatchNode(valbox) => valbox.compile(),
-            ST::StatementNode::CallChainNode(valbox) => valbox.compile()
+            ST::StatementNode::CallNode(valbox) => valbox.compile()
         }
     }
 }
@@ -286,10 +286,15 @@ impl ST::CatchNode {
     }
 }
 
-
-impl ST::CallUncallNode {
-    pub fn compile(&self) -> Code {        
+impl ST::CallNode {
+    pub fn compile(&self) -> Code {
         let mut code = Code::new();
+
+        for &register in self.stolen_args.iter().rev() {
+            code.push_fwd(Instruction::LoadRegister{register});
+            code.push_fwd(Instruction::FreeRegister{register});
+        }
+
         if self.is_uncall {
             code.push_bkwd(Instruction::Call{idx: self.func_idx});
             code.push_fwd(Instruction::Uncall{idx: self.func_idx});
@@ -299,22 +304,6 @@ impl ST::CallUncallNode {
             }
             code.push_fwd(Instruction::Call{idx: self.func_idx});
             code.push_bkwd(Instruction::Uncall{idx: self.func_idx});
-        }
-        code
-    }
-}
-
-impl ST::CallChainNode {
-    pub fn compile(&self) -> Code {
-        let mut code = Code::new();
-
-        for &register in self.stolen_args.iter().rev() {
-            code.push_fwd(Instruction::LoadRegister{register});
-            code.push_fwd(Instruction::FreeRegister{register});
-        }
-
-        for call in self.calls.iter() {
-            code.extend(call.compile());
         }
 
         for &register in self.return_args.iter().rev() {

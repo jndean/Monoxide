@@ -1,7 +1,6 @@
 
 use std::collections::{HashSet, HashMap};
 use std::cell::RefCell;
-use std::iter::FromIterator;
 use std::rc::Rc;
 
 use crate::interpreter;
@@ -177,12 +176,8 @@ impl<'a> SyntaxContext<'a> {
         self.consts.len() - 1
     }
 
-    fn lookup_function(&self, name: &str) -> usize {
-        println!("Name: {}", name);
-        println!("Prototypes: {:#?}", self.functions);
-        let prototype = self.functions.get(name)
-                                      .expect("Undefined function");
-        prototype.id
+    fn lookup_function_prototype(&self, name: &str) -> &ST::FunctionPrototype {
+        self.functions.get(name).expect("Undefined function")
     }
 
     fn lookup_local(&self, name: &str) -> usize {
@@ -390,34 +385,29 @@ impl ST::CatchNode {
 }
 
 
-impl ST::CallUncallNode {
-    fn from(node: PT::CallUncallNode, ctx: &mut SyntaxContext) -> ST::CallUncallNode {
-        ST::CallUncallNode{
-            is_uncall: node.is_uncall,
-            func_idx: ctx.lookup_function(&node.name),
-            borrow_args: node.borrow_args.into_iter()
-                                         .map(|a| ST::LookupNode::from(a, ctx))
-                                         .collect()
-        }
-    }
-}
-
-impl ST::CallChainNode {
-    fn from(node: PT::CallChainNode, ctx: &mut SyntaxContext) -> ST::CallChainNode {
+impl ST::CallNode {
+    fn from(node: PT::CallNode, ctx: &mut SyntaxContext) -> ST::CallNode {
+        
+        let proto = ctx.lookup_function_prototype(&node.name);
+        let func_idx = proto.id;
+        
         let mut stolen_args = Vec::with_capacity(node.stolen_args.len());
         for arg in node.stolen_args.into_iter() {
             stolen_args.push(ctx.lookup_local(&arg));
             ctx.local_variables.remove(&arg);
         }
-        let calls = node.calls.into_iter()
-                              .map(|c| ST::CallUncallNode::from(c, ctx))
-                              .collect();                  
+        let borrow_args = node.borrow_args.into_iter()
+                                          .map(|a| ST::LookupNode::from(a, ctx))
+                                          .collect();      
         let mut return_args = Vec::with_capacity(node.return_args.len());
         for arg in node.return_args.into_iter() {
             return_args.push(ctx.create_variable(&arg));
             // TODO: Using create variable is WRONG
         }
-        ST::CallChainNode{calls, stolen_args, return_args}
+        ST::CallNode{
+            is_uncall: node.is_uncall,
+            func_idx, borrow_args, stolen_args, return_args
+        }
     }
 }
 
@@ -532,7 +522,7 @@ impl ST::StatementNode {
         }   }   }
         passthrough! {
             LetUnletNode, RefUnrefNode, ModopNode, IfNode, CatchNode,
-            CallChainNode
+            CallNode
         }
     }
 }
@@ -550,7 +540,6 @@ pub fn check_syntax(module: PT::Module) -> ST::Module{
     }
 
     println!("PROTOTYPES {:#?}", func_prototypes);
-    panic!("here");
 
     let mut main_idx = None;
     let mut functions = Vec::with_capacity(module.functions.len());

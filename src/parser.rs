@@ -6,8 +6,8 @@ use crate::tokeniser::Token;
 use crate::parsetree::{
     StatementNode, ExpressionNode, LookupNode, LetUnletNode,
     FractionNode, BinopNode, IfNode, ModopNode, FunctionNode,
-    CatchNode, ArrayLiteralNode, Module, RefUnrefNode, CallUncallNode,
-    CallChainNode, FunctionParam
+    CatchNode, ArrayLiteralNode, Module, RefUnrefNode, CallNode,
+    FunctionParam
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -38,8 +38,7 @@ pub enum Parsed {
     LookupNode(Option<LookupNode>),
     IfNode(Option<IfNode>),
     CatchNode(Option<CatchNode>),
-    CallUncallNode(Option<CallUncallNode>),
-    CallChainNode(Option<CallChainNode>),
+    CallNode(Option<CallNode>),
     FunctionNode(Option<FunctionNode>),
     FunctionParam(Option<FunctionParam>),
     ArrayLiteralNode(Option<ArrayLiteralNode>),
@@ -330,28 +329,6 @@ impl Parser {
         None
     }  
 
-
-    memoise!(call_stmt_ as call_stmt -> StatementNode);
-    pub fn call_stmt_(&mut self) -> Option<StatementNode> {
-        let pos = self.mark();
-
-        let stolen = self.stolen_args();
-        if let Some(calluncall) = self.calluncall_block() {
-        let returned = self.return_args();
-        if self.expect_literal(";") {
-            return Some(StatementNode::CallChainNode(Box::new(
-                CallChainNode{
-                    calls: vec![calluncall],
-                    stolen_args: stolen,
-                    return_args: returned,
-                }
-            )))
-        }}
-
-        self.reset(pos);
-        None
-    }
-
     memoise!(function_param_ as function_param -> FunctionParam);
     pub fn function_param_(&mut self) -> Option<FunctionParam> {
         let pos = self.mark();
@@ -394,17 +371,23 @@ impl Parser {
     }
     
 
-    memoise!(calluncall_block_ as calluncall_block -> CallUncallNode);
-    pub fn calluncall_block_(&mut self) -> Option<CallUncallNode> {
+    memoise!(call_stmt_ as call_stmt -> StatementNode);
+    pub fn call_stmt_(&mut self) -> Option<StatementNode> {
         let pos = self.mark();
 
+        let stolen_args = self.stolen_args();
         let is_uncall = self.expect_literal("~");
         if let Some(name) = self.expect_type("NAME") {
         if self.expect_literal("(") {
         let borrow_args = self.join(Parser::lookup, ",");
         if self.expect_literal(")") {
-            return Some(CallUncallNode{is_uncall, borrow_args, name: name.string_})
-        }}};
+        let return_args = self.return_args();
+        if self.expect_literal(";") {
+            let name = name.string_;
+            return Some(StatementNode::CallNode(Box::new(
+                CallNode{is_uncall, name, borrow_args, stolen_args, return_args}
+            )));
+        }}}};
 
         self.reset(pos);
         None
