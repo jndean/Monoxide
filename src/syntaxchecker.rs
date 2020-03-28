@@ -1,6 +1,7 @@
 
 use std::collections::{HashSet, HashMap};
 use std::cell::RefCell;
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
 use crate::interpreter;
@@ -10,9 +11,23 @@ use crate::syntaxtree as ST;
 
 #[derive(Debug)]
 pub struct Variable {
+    id: usize,
     exteriors: RefCell<HashSet<String>>,
     interiors: RefCell<HashSet<String>>
 }
+
+impl Hash for Variable{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
+impl PartialEq for Variable {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+impl Eq for Variable {}
+
 
 #[derive(Debug)]
 pub struct Reference {
@@ -22,22 +37,6 @@ pub struct Reference {
     var: Rc<Variable>
 }
 
-impl Reference {
-    fn new(name: String, register: usize, is_borrowed: bool) -> Reference {
-        let mut exteriors = HashSet::new();
-        exteriors.insert(name);
-        Reference {
-            is_interior: false,
-            register,
-            is_borrowed,
-            var: Rc::new(Variable{
-                exteriors: RefCell::new(exteriors),
-                interiors: RefCell::new(HashSet::new())
-            })
-        }
-    }
-}
-
 
 #[derive(Debug)]
 pub struct SyntaxContext<'a> {
@@ -45,7 +44,8 @@ pub struct SyntaxContext<'a> {
     consts: Vec<interpreter::Variable>,
     free_registers: Vec<usize>,
     local_variables: HashMap<String, Reference>,
-    num_registers: usize
+    num_registers: usize,
+    last_var_id: usize
 }
 
 
@@ -56,13 +56,34 @@ impl<'a> SyntaxContext<'a> {
             consts: Vec::new(),
             free_registers: Vec::new(),
             local_variables: HashMap::new(),
-            num_registers: 0
+            num_registers: 0,
+            last_var_id: 0
+        }
+    }
+
+    pub fn new_variable_id(&mut self) -> usize {
+        self.last_var_id += 1;
+        self.last_var_id
+    }
+
+    pub fn new_variable(&mut self, name: String, register: usize, is_borrowed: bool) -> Reference {
+        let mut exteriors = HashSet::new();
+        exteriors.insert(name);
+        Reference {
+            is_interior: false,
+            register,
+            is_borrowed,
+            var: Rc::new(Variable{
+                id: self.new_variable_id(),
+                exteriors: RefCell::new(exteriors),
+                interiors: RefCell::new(HashSet::new())
+            })
         }
     }
 
     fn init_func(
         &mut self,
-        owned_links_raw: Vec<String>, 
+        owned_links_raw: Vec<String>,
         borrows: Vec<PT::FunctionParam>,
         steals: Vec<PT::FunctionParam>
     ) -> (HashMap<String, Rc<Variable>>, Vec<usize>, Vec<usize>) {
@@ -71,30 +92,29 @@ impl<'a> SyntaxContext<'a> {
         let mut owned_links = HashSet::new();
         for link in owned_links_raw {
             let link = exterior_link_name(&link);
-            if owned_links.insert(link) { 
+            if !owned_links.insert(link) {
                 panic!("Duplicate owned links")
             };
         }
-        
+
         let mut linked: HashMap<String, Rc<Variable>> = HashMap::new();
 
         // Init borrowed params //
         let mut borrow_registers = Vec::with_capacity(borrows.len());
         let mut steal_registers = Vec::with_capacity(steals.len());
         for (params, registers) in vec![(borrows, &mut borrow_registers), (steals, &mut steal_registers)] {
-            for p in params {    
+            for p in params {
                 if self.local_variables.contains_key(&p.name) {
                     panic!("Duplicate function parameter names");
-                };        
+                };
                 let register = self.get_free_register();
                 registers.push(register);
 
                 if !p.is_ref {
                     // Singly owned //
-                    self.local_variables.insert(
-                        p.name.clone(),
-                        Reference::new(p.name, register, true)
-                    );
+                    let new_var = self.new_variable(p.name.clone(), register, true);
+                    self.local_variables.insert(p.name, new_var);
+
                 } else if let Some(link) = p.link {
                     let is_interior = is_interior_link(&link);
                     let ext_link = exterior_link_name(&link);
@@ -117,6 +137,7 @@ impl<'a> SyntaxContext<'a> {
                                 interiors.insert(String::from("caller anchor"));
                             }
                             let var = Rc::new(Variable{
+                                id: self.new_variable_id(),
                                 exteriors: RefCell::new(exteriors),
                                 interiors: RefCell::new(interiors),
                             });
@@ -130,14 +151,14 @@ impl<'a> SyntaxContext<'a> {
 
                 } else {
                     // Unbound ref //
-                    let varref = Reference::new(p.name.clone(), register, true);
+                    let varref = self.new_variable(p.name.clone(), register, true);
                     varref.var.interiors.borrow_mut().insert(String::from("calling scope"));
-                    self.local_variables.insert(p.name, varref); 
+                    self.local_variables.insert(p.name, varref);
                 }
             }
         }
 
-        // Still need to check all the owned link groups have an exterior ref //
+        // TODO: Still need to check all the owned link groups have an exterior ref //
 
         (linked, borrow_registers, steal_registers)
     }
@@ -180,13 +201,13 @@ impl<'a> SyntaxContext<'a> {
         self.functions.get(name).expect("Undefined function")
     }
 
-    fn lookup_local(&self, name: &str) -> usize {
-        let v_ref = self.local_variables.get(name);
-        if let Some(Reference{register, ..}) = v_ref {
-            *register
-        } else { 
-            panic!("Use of non-existant variable") 
-        }
+    fn check_singly_owned(&self, name: &str) -> bool {
+        let var = &self.lookup_variable(name).var;
+        var.interiors.borrow().len() == 0 && var.exteriors.borrow().len() == 1
+    }
+
+    fn lookup_variable(&self, name: &str) -> &Reference {
+        self.local_variables.get(name).expect("Looking up non-existant variable")
     }
 
     fn get_free_register(&mut self) -> usize {
@@ -204,10 +225,8 @@ impl<'a> SyntaxContext<'a> {
             panic!("Initialising a variable that already exists");
         };
         let register = self.get_free_register();
-        self.local_variables.insert(
-            name.to_string(),
-            Reference::new(name.to_string(), register, false)
-        );
+        let new_var = self.new_variable(name.to_string(), register, false);
+        self.local_variables.insert(name.to_string(), new_var);
         register
     }
 
@@ -215,20 +234,20 @@ impl<'a> SyntaxContext<'a> {
         if self.local_variables.contains_key(name) {
             panic!("Initialising a reference that already exists");
         };
-        
+
         let (is_interior, mut register, var) = match self.local_variables.get(&lookup.name) {
             None => panic!("Referencing a non-existant variable"),
             Some(Reference{is_interior, register, var, ..}) => {
                 (*is_interior || lookup.indices.len() > 0, *register, Rc::clone(var))
             }
         };
-        if is_interior { 
+        if is_interior {
             register = self.get_free_register();
             var.interiors.borrow_mut().insert(name.to_string());
         } else {
             var.exteriors.borrow_mut().insert(name.to_string());
         }
-    
+
         self.local_variables.insert(
             name.to_string(),
             Reference{is_interior, register, var, is_borrowed: false}
@@ -244,7 +263,7 @@ impl<'a> SyntaxContext<'a> {
             Some(Reference{is_borrowed: true, ..}) => panic!("Removing borrowed reference"),
             Some(Reference{is_interior, register, var, ..}) => {
                 let is_interior = is_interior || lookup.indices.len() > 0;
-                
+
                 // Check the other name is a shared ref
                 match self.local_variables.get(&lookup.name) {
                     None => panic!("Unreferencing a non-existant variable"),
@@ -267,7 +286,7 @@ impl<'a> SyntaxContext<'a> {
             None => panic!("Uninitialising non-existant variable"),
             Some(Reference{is_borrowed: true, ..}) => panic!("Uninitialising borrowed variable"),
             Some(Reference{var, register, ..}) => {
-                if !var.interiors.borrow().is_empty() 
+                if !var.interiors.borrow().is_empty()
                         || var.exteriors.borrow().len() > 1 {
                     panic!("Uninitialising variable with other refs");
                 }
@@ -311,7 +330,7 @@ impl ST::ArrayLiteralNode {
 impl ST::LookupNode {
     fn from(node: PT::LookupNode, ctx: &mut SyntaxContext) -> ST::LookupNode {
         ST::LookupNode{
-            register: ctx.lookup_local(&node.name),
+            register: ctx.lookup_variable(&node.name).register,
             indices: node.indices.into_iter()
                                  .map(|i| ST::ExpressionNode::from(i, ctx))
                                  .collect()
@@ -350,7 +369,7 @@ impl ST::LetUnletNode {
 impl ST::RefUnrefNode {
     fn from(node: PT::RefUnrefNode, ctx: &mut SyntaxContext) -> ST::RefUnrefNode {
         ST::RefUnrefNode{
-            is_unref: node.is_unref, 
+            is_unref: node.is_unref,
             register: if node.is_unref {ctx.remove_ref(&node.name, &node.rhs)}
                       else             {ctx.create_ref(&node.name, &node.rhs)},
             rhs: ST::LookupNode::from(node.rhs, ctx)
@@ -387,18 +406,56 @@ impl ST::CatchNode {
 
 impl ST::CallNode {
     fn from(node: PT::CallNode, ctx: &mut SyntaxContext) -> ST::CallNode {
-        
+
+        /* 
+        TODO:
+            ✓ Check singly owned params are singly owned
+            - Check owned groups have exterior ref
+            ✓ Check two inputs of the same var share a link
+            ✓ Check interiors aren't passed as exteriors
+            - Check owned link groups take all refs to the var
+            - Check not stealing borrowed refs
+        */
+
         let proto = ctx.lookup_function_prototype(&node.name);
         let func_idx = proto.id;
-        
+        let mut used_vars: HashMap<Rc<Variable>, Option<String>> = HashMap::new();
+
+        for (param, proto_link) in node.borrow_args.iter().zip(proto.borrow_params.iter()) {
+
+            // Check two inputs of the same var share a link //
+            let var = &ctx.lookup_variable(&param.name).var;
+            let link = proto_link.clone().map(|pl| pl.link).flatten();
+            if let Some(other_link) = used_vars.get(var) {
+                if link != *other_link {panic!("Passing incorrectly linked references")};
+            }
+            used_vars.insert(Rc::clone(var), link);
+
+            match proto_link {
+                Some(proto_link) => {
+                    // Check interiors aren't passed as exteriors //
+                    if !proto_link.is_interior && ctx.lookup_variable(&param.name).is_interior {
+                        panic!("Passing interior to function marked as exterior")
+                    }
+                },
+                None => {
+                    // Check Singly-owned //
+                    if !ctx.check_singly_owned(&param.name) {
+                        panic!("Call uses non-singly owned variable");
+                    }
+
+                }
+            }
+        }
+
         let mut stolen_args = Vec::with_capacity(node.stolen_args.len());
         for arg in node.stolen_args.into_iter() {
-            stolen_args.push(ctx.lookup_local(&arg));
+            stolen_args.push(ctx.lookup_variable(&arg).register);
             ctx.local_variables.remove(&arg);
         }
         let borrow_args = node.borrow_args.into_iter()
                                           .map(|a| ST::LookupNode::from(a, ctx))
-                                          .collect();      
+                                          .collect();
         let mut return_args = Vec::with_capacity(node.return_args.len());
         for arg in node.return_args.into_iter() {
             return_args.push(ctx.create_variable(&arg));
@@ -413,7 +470,7 @@ impl ST::CallNode {
 
 impl ST::FunctionNode {
     fn from(
-        node: PT::FunctionNode, 
+        node: PT::FunctionNode,
         func_lookup: &HashMap<String, ST::FunctionPrototype>
     ) -> ST::FunctionNode {
 
@@ -494,7 +551,7 @@ impl ST::FunctionPrototype {
             &mut linked_borrows,
             &mut owned_link_groups,
             true, 1);
-            
+
         let return_params = process_params(
             &function.return_params,
             &mut linked_borrows,
@@ -516,7 +573,7 @@ impl ST::StatementNode {
             ($( $x:ident ),*) => {
                 match node {
                     $(
-                        PT::StatementNode::$x(valbox) => 
+                        PT::StatementNode::$x(valbox) =>
                         ST::StatementNode::$x(Box::new(ST::$x::from(*valbox, ctx)))
                     ,)*
         }   }   }
@@ -529,7 +586,7 @@ impl ST::StatementNode {
 
 pub fn check_syntax(module: PT::Module) -> ST::Module{
     let mut func_prototypes = HashMap::new();
-    
+
     for f in module.functions.iter() {
         if func_prototypes.insert(
             f.name.clone(),
