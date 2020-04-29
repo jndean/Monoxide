@@ -410,36 +410,46 @@ impl ST::CallNode {
         /* 
         TODO:
             ✓ Check singly owned params are singly owned
-            - Check owned groups have exterior ref
+            ✓ Check owned groups have exterior ref
             ✓ Check two inputs of the same var share a link
             ✓ Check interiors aren't passed as exteriors
             - Check owned link groups take all refs to the var
             - Check not stealing borrowed refs
+            - Check linked params share a var
         */
 
         let proto = ctx.lookup_function_prototype(&node.name);
         let func_idx = proto.id;
-        let mut used_vars: HashMap<Rc<Variable>, Option<String>> = HashMap::new();
+        let mut used_links: HashMap<Rc<Variable>, Option<String>> = HashMap::new();
+        let mut used_vars: HashMap<String, Rc<Variable>> = HashMap::new();
 
         for (param, proto_link) in node.borrow_args.iter().zip(proto.borrow_params.iter()) {
 
-            // Check two inputs of the same var share a link //
             let var = &ctx.lookup_variable(&param.name).var;
             let link = proto_link.clone().map(|pl| pl.link).flatten();
-            if let Some(other_link) = used_vars.get(var) {
-                if link != *other_link {panic!("Passing incorrectly linked references")};
-            }
-            used_vars.insert(Rc::clone(var), link);
+            if let Some(other_link) = used_links.get(var) {
+                if link != *other_link {
+                    panic!("Passing incorrectly linked references")
+            }};
+            used_links.insert(Rc::clone(var), link.clone());
+            if let Some(link) = &link {
+                if let Some(other_var) = used_vars.get(link) {
+                    if *var != *other_var {
+                        panic!("Passing incorrectly linked references");
+                    }
+                }
+                used_vars.insert(link.clone(), Rc::clone(var));
+                // done here?
+            };
+
 
             match proto_link {
                 Some(proto_link) => {
-                    // Check interiors aren't passed as exteriors //
                     if !proto_link.is_interior && ctx.lookup_variable(&param.name).is_interior {
                         panic!("Passing interior to function marked as exterior")
                     }
                 },
                 None => {
-                    // Check Singly-owned //
                     if !ctx.check_singly_owned(&param.name) {
                         panic!("Call uses non-singly owned variable");
                     }
@@ -558,7 +568,18 @@ impl ST::FunctionPrototype {
             &mut owned_link_groups,
             true, 2);
 
-        let owned_link_groups = owned_link_groups.into_iter().map(|(_, v)| v).collect();
+        let owned_link_groups = owned_link_groups.into_iter().map(|(_, v)| v)
+                                                 .collect::<Vec<[Vec<usize>; 3]>>();
+
+        // Check all owned link groups have an exterior ref //
+        'group_iter: for link_group in &owned_link_groups {
+            for i in &link_group[0] {
+                if let Some(paramlink) = &borrow_params[*i] {
+                    if !paramlink.is_interior {
+                        continue 'group_iter;
+            }   }   }
+            panic!("Owned link group without borowed exterior ref");
+        }
 
         ST::FunctionPrototype{
             id, borrow_params, steal_params, return_params, owned_link_groups
