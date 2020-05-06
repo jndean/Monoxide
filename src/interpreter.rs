@@ -79,7 +79,8 @@ pub enum Instruction {
     FreeRegister{register: usize},
     Subscript{size: usize},
     Store,
-    Pull,
+    Pull{register: usize},
+    Push{register: usize},
     BinopAdd,
     BinopSub,
     BinopMul,
@@ -225,7 +226,8 @@ impl<'a> Interpreter<'a> {
                     Instruction::Jump{delta} => self.jump(*delta),
                     Instruction::JumpIfTrue{delta} => self.jump_if_true(*delta),
                     Instruction::JumpIfFalse{delta} => self.jump_if_false(*delta),
-                    Instruction::Pull => self.pull(),
+                    Instruction::Pull{register} => self.pull(*register),
+                    Instruction::Push{register} => self.push(*register),
                     Instruction::Call{idx} => {self.call(*idx, true); continue 'instruction_loop},
                     Instruction::Uncall{idx} => {self.call(*idx, false); continue 'instruction_loop},
                     Instruction::Reverse{idx} => {
@@ -363,6 +365,31 @@ impl<'a> Interpreter<'a> {
     binop_method!(binop_mul, *);
     binop_method!(binop_div, /);
     
+    fn pull(&mut self, register: usize) {
+        let new_var = match &mut *self.pop_var().borrow_mut() {
+            Variable::Array(items) => match items.pop() {
+                Some(item) => item,
+                None => panic!("Pulling from empty array")
+            },
+            Variable::Frac(_) => panic!("Pulling from number")
+        };
+        replace(
+            self.registers.get_mut(register).unwrap(),
+            Some(new_var)
+        );
+    }
+
+    fn push(&mut self, register: usize) {
+        let src_ref = replace(
+            self.registers.get_mut(register).unwrap(),
+            None
+        ).unwrap();
+        match &mut *self.pop_var().borrow_mut() {
+            Variable::Array(items) => items.push(src_ref),
+            Variable::Frac(_) => panic!("Pushing onto number")
+        }
+    }
+    
     #[inline]
     fn pop(&mut self) -> StackObject {
         self.stack.pop().expect("Popped off empty stack")
@@ -374,18 +401,6 @@ impl<'a> Interpreter<'a> {
             StackObject::Var(x) => x,
             _ => panic!("Non-variable found on the stack")
         }
-    }
-
-    #[inline]
-    fn pull(&mut self) {
-        let new_var = match &mut *self.pop_var().borrow_mut() {
-            Variable::Array(items) => match items.pop() {
-                Some(item) => item,
-                None => panic!("Pulling from empty array")
-            },
-            Variable::Frac(_) => panic!("Pulling from number")
-        };
-        self.stack.push(StackObject::Var(new_var));
     }
 
     pub fn debug_print(&self) {

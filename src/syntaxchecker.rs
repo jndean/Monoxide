@@ -387,12 +387,13 @@ impl ST::ModopNode {
     }
 }
 
-impl ST::PullNode {
-    fn from(node: PT::PullNode, ctx: &mut SyntaxContext) -> ST::PullNode {
-        ST::PullNode{
-            register: ctx.create_variable(&node.dst),
-            src: ST::LookupNode::from(node.src, ctx)
-        }
+impl ST::PushPullNode {
+    fn from(node: PT::PushPullNode, ctx: &mut SyntaxContext) -> ST::PushPullNode {
+        let register = if node.is_push {ctx.remove_variable(&node.name)}
+                       else            {ctx.create_variable(&node.name)};
+        let lookup = ST::LookupNode::from(node.lookup, ctx);
+
+        ST::PushPullNode{register, lookup, is_push: node.is_push}
     }
 }
 
@@ -609,7 +610,7 @@ impl ST::StatementNode {
         }   }   }
         passthrough! {
             LetUnletNode, RefUnrefNode, ModopNode, IfNode, CatchNode,
-            CallNode, PullNode
+            CallNode, PushPullNode
         }
     }
 }

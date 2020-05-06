@@ -161,7 +161,7 @@ impl ST::StatementNode {
             ST::StatementNode::RefUnrefNode(valbox) => valbox.compile(),
             ST::StatementNode::IfNode(valbox) => valbox.compile(),
             ST::StatementNode::ModopNode(valbox) => valbox.compile(),
-            ST::StatementNode::PullNode(valbox) => valbox.compile(),
+            ST::StatementNode::PushPullNode(valbox) => valbox.compile(),
             ST::StatementNode::CatchNode(valbox) => valbox.compile(),
             ST::StatementNode::CallNode(valbox) => valbox.compile()
         }
@@ -240,18 +240,26 @@ impl ST::ModopNode {
     }
 }
 
-impl ST::PullNode {
+impl ST::PushPullNode {
     pub fn compile(&self) -> Code {
         let mut code = Code::new();
-
-        let src = self.src.compile();
+        let lookup = self.lookup.compile();
         let register = self.register;
 
-        code.append_fwd(src.clone());
-        code.push_fwd(Instruction::Pull);
-        code.push_fwd(Instruction::StoreRegister{register});
-        
-        // TODO backwards implementation //
+        if self.is_push {
+            code.append_fwd(lookup.clone());
+            code.push_fwd(Instruction::Push{register});
+    
+            code.push_bkwd(Instruction::Pull{register});
+            code.append_bkwd(lookup);
+
+        } else {
+            code.append_fwd(lookup.clone());
+            code.push_fwd(Instruction::Pull{register});
+    
+            code.push_bkwd(Instruction::Push{register});
+            code.append_bkwd(lookup);
+        }
 
         code
     }

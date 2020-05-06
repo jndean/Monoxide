@@ -50,7 +50,7 @@ pub enum StatementNode {
     ModopNode(Box<ModopNode>),
     CatchNode(Box<CatchNode>),
     CallNode(Box<CallNode>),
-    PullNode(Box<PullNode>)
+    PushPullNode(Box<PushPullNode>)
 }
 
 #[derive(Clone, Debug)]
@@ -75,9 +75,10 @@ pub struct ModopNode {
 }
 
 #[derive(Clone, Debug)]
-pub struct PullNode {
-    pub dst: String,
-    pub src: LookupNode
+pub struct PushPullNode {
+    pub is_push: bool,
+    pub name: String,
+    pub lookup: LookupNode
 }
 
 #[derive(Clone, Debug)]

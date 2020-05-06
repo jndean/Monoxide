@@ -7,7 +7,7 @@ use crate::parsetree::{
     StatementNode, ExpressionNode, LookupNode, LetUnletNode,
     FractionNode, BinopNode, IfNode, ModopNode, FunctionNode,
     CatchNode, ArrayLiteralNode, Module, RefUnrefNode, CallNode,
-    FunctionParam, PullNode
+    FunctionParam, PushPullNode
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -36,7 +36,7 @@ pub enum Parsed {
     ExpressionNode(Option<ExpressionNode>),
     Instruction(Option<Instruction>),
     LookupNode(Option<LookupNode>),
-    PullNode(Option<PullNode>),
+    PushPullNode(Option<PushPullNode>),
     IfNode(Option<IfNode>),
     CatchNode(Option<CatchNode>),
     CallNode(Option<CallNode>),
@@ -500,16 +500,26 @@ impl Parser {
     pub fn pull_stmt_(&mut self) -> Option<StatementNode> {
         let pos = self.mark();
         
-        if let Some(dst) = self.name() {
+        if let Some(name) = self.name() {
         if self.expect_literal("<=") {
-        if let Some(src) = self.lookup() {
+        if let Some(lookup) = self.lookup() {
         if self.expect_literal(";") {
-            return Some(StatementNode::PullNode(Box::new(
-                PullNode{dst, src}
+            return Some(StatementNode::PushPullNode(Box::new(
+                PushPullNode{is_push: false, name, lookup}
             )));    
         }}}};
-
         self.reset(pos);
+        
+        if let Some(name) = self.name() {
+        if self.expect_literal("=>") {
+        if let Some(lookup) = self.lookup() {
+        if self.expect_literal(";") {
+            return Some(StatementNode::PushPullNode(Box::new(
+                PushPullNode{is_push: true, name, lookup}
+            )));    
+        }}}};
+        self.reset(pos);
+                    
         None
     }
 
