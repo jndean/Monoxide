@@ -192,7 +192,7 @@ impl<'a> Interpreter<'a> {
             let instructions = if self.forwards {&self.code.fwd} 
                                else             {&self.code.bkwd};
 
-            'ip_loop: loop {
+            loop {
 
                 let instruction = match instructions.get(self.ip) {
                     Some(inst) => inst,

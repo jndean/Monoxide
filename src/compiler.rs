@@ -161,6 +161,7 @@ impl ST::StatementNode {
             ST::StatementNode::RefUnrefNode(valbox) => valbox.compile(),
             ST::StatementNode::IfNode(valbox) => valbox.compile(),
             ST::StatementNode::ModopNode(valbox) => valbox.compile(),
+            ST::StatementNode::PullNode(valbox) => valbox.compile(),
             ST::StatementNode::CatchNode(valbox) => valbox.compile(),
             ST::StatementNode::CallNode(valbox) => valbox.compile()
         }
@@ -235,6 +236,23 @@ impl ST::ModopNode {
         code.push_bkwd(Instruction::DuplicateRef);
         code.append_bkwd(lookup);
         
+        code
+    }
+}
+
+impl ST::PullNode {
+    pub fn compile(&self) -> Code {
+        let mut code = Code::new();
+
+        let src = self.src.compile();
+        let register = self.register;
+
+        code.append_fwd(src.clone());
+        code.push_fwd(Instruction::Pull);
+        code.push_fwd(Instruction::StoreRegister{register});
+        
+        // TODO backwards implementation //
+
         code
     }
 }

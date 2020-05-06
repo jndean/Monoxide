@@ -7,7 +7,7 @@ use crate::parsetree::{
     StatementNode, ExpressionNode, LookupNode, LetUnletNode,
     FractionNode, BinopNode, IfNode, ModopNode, FunctionNode,
     CatchNode, ArrayLiteralNode, Module, RefUnrefNode, CallNode,
-    FunctionParam
+    FunctionParam, PullNode
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -36,6 +36,7 @@ pub enum Parsed {
     ExpressionNode(Option<ExpressionNode>),
     Instruction(Option<Instruction>),
     LookupNode(Option<LookupNode>),
+    PullNode(Option<PullNode>),
     IfNode(Option<IfNode>),
     CatchNode(Option<CatchNode>),
     CallNode(Option<CallNode>),
@@ -323,6 +324,7 @@ impl Parser {
         if let Some(stmt) = self.letunlet_stmt() {return Some(stmt);}
         if let Some(stmt) = self.refunref_stmt() {return Some(stmt);}
         if let Some(stmt) = self.modop_stmt() {return Some(stmt);}
+        if let Some(stmt) = self.pull_stmt() {return Some(stmt);}
         if let Some(stmt) = self.if_stmt() {return Some(stmt);}
         if let Some(stmt) = self.catch_stmt() {return Some(stmt);}
         if let Some(stmt) = self.call_stmt() {return Some(stmt);}
@@ -494,6 +496,22 @@ impl Parser {
         None
     }
 
+    memoise!(pull_stmt_ as pull_stmt -> StatementNode);
+    pub fn pull_stmt_(&mut self) -> Option<StatementNode> {
+        let pos = self.mark();
+        
+        if let Some(dst) = self.name() {
+        if self.expect_literal("<=") {
+        if let Some(src) = self.lookup() {
+        if self.expect_literal(";") {
+            return Some(StatementNode::PullNode(Box::new(
+                PullNode{dst, src}
+            )));    
+        }}}};
+
+        self.reset(pos);
+        None
+    }
 
     memoise!(modop_stmt_ as modop_stmt -> StatementNode);
     pub fn modop_stmt_(&mut self) -> Option<StatementNode> {

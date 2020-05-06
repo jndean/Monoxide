@@ -49,7 +49,8 @@ pub enum StatementNode {
     IfNode(Box<IfNode>),
     ModopNode(Box<ModopNode>),
     CatchNode(Box<CatchNode>),
-    CallNode(Box<CallNode>)
+    CallNode(Box<CallNode>),
+    PullNode(Box<PullNode>)
 }
 
 #[derive(Clone, Debug)]
@@ -71,6 +72,12 @@ pub struct ModopNode {
     pub lookup: LookupNode,
     pub op: interpreter::Instruction,
     pub rhs: ExpressionNode
+}
+
+#[derive(Clone, Debug)]
+pub struct PullNode {
+    pub dst: String,
+    pub src: LookupNode
 }
 
 #[derive(Clone, Debug)]

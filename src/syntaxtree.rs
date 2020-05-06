@@ -40,6 +40,7 @@ pub enum StatementNode {
     LetUnletNode(Box<LetUnletNode>),
     RefUnrefNode(Box<RefUnrefNode>),
     IfNode(Box<IfNode>),
+    PullNode(Box<PullNode>),
     ModopNode(Box<ModopNode>),
     CatchNode(Box<CatchNode>),
     CallNode(Box<CallNode>)
@@ -64,6 +65,12 @@ pub struct ModopNode {
     pub lookup: LookupNode,
     pub op: interpreter::Instruction,
     pub rhs: ExpressionNode
+}
+
+#[derive(Clone, Debug)]
+pub struct PullNode {
+    pub register: usize,
+    pub src: LookupNode
 }
 
 #[derive(Clone, Debug)]

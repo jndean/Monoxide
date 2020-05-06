@@ -1,10 +1,16 @@
 
 fn main()() {
-    x := 0;
+    x := [1,2,3];
+    y <= x;
+    y += 1;
+
+    $x := 0;
     y := 1;
-    x,y => swap() => x,y;
+    z := &y;$
+    $x, y => swap() => x, y;$
+    $swap(x, z);$
 } ~main()
 
-fn swap<A>()(x, y) {
+fn swap<>(&A x, &A, y)() {
     
-} ~swap(y, x)
+} ~swap()

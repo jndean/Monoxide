@@ -387,6 +387,15 @@ impl ST::ModopNode {
     }
 }
 
+impl ST::PullNode {
+    fn from(node: PT::PullNode, ctx: &mut SyntaxContext) -> ST::PullNode {
+        ST::PullNode{
+            register: ctx.create_variable(&node.dst),
+            src: ST::LookupNode::from(node.src, ctx)
+        }
+    }
+}
+
 impl ST::IfNode {
     fn from(node: PT::IfNode, ctx: &mut SyntaxContext) -> ST::IfNode {
         let fwd_expr = ST::ExpressionNode::from(node.fwd_expr, ctx);
@@ -600,7 +609,7 @@ impl ST::StatementNode {
         }   }   }
         passthrough! {
             LetUnletNode, RefUnrefNode, ModopNode, IfNode, CatchNode,
-            CallNode
+            CallNode, PullNode
         }
     }
 }
