@@ -207,7 +207,9 @@ impl<'a> SyntaxContext<'a> {
     }
 
     fn lookup_variable(&self, name: &str) -> &Reference {
-        self.local_variables.get(name).expect("Looking up non-existant variable")
+        let var = self.local_variables.get(name);
+        assert!(var.is_some(), "Looking up non-existant variable \"{}\"", name);
+        var.unwrap()
     }
 
     fn get_free_register(&mut self) -> usize {
@@ -294,6 +296,12 @@ impl<'a> SyntaxContext<'a> {
                 register
             }
         }
+    }
+
+    fn check_ref_is_resizable(&self, name: &str) -> bool {
+        let varref = self.lookup_variable(name);
+        let num_interiors = varref.var.interiors.borrow().len();
+        num_interiors == 0 || (num_interiors == 1 && varref.is_interior)
     }
 }
 
@@ -389,6 +397,14 @@ impl ST::ModopNode {
 
 impl ST::PushPullNode {
     fn from(node: PT::PushPullNode, ctx: &mut SyntaxContext) -> ST::PushPullNode {
+
+        // The lookup may have no other interior references
+        // (it may be an interior reference itself)
+        assert!(
+            ctx.check_ref_is_resizable(&node.lookup.name),
+            "Resizing {} when other references to its interior exist", node.lookup.name
+        );
+
         let register = if node.is_push {ctx.remove_variable(&node.name)}
                        else            {ctx.create_variable(&node.name)};
         let lookup = ST::LookupNode::from(node.lookup, ctx);
