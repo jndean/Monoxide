@@ -606,12 +606,6 @@ impl Parser {
     pub fn expression_(&mut self) -> Option<ExpressionNode> {
         let pos = self.mark();
         
-        if let Some(token) = self.expect_type("NUMBER") {
-            let value = Fraction::from_str(&token.string_[..]).unwrap();
-            let value = FractionNode{value};
-            return Some(ExpressionNode::FractionNode(Box::new(value)));
-        };
-        
         if let Some(x) = self.array_literal() {
             return Some(ExpressionNode::ArrayLiteralNode(Box::new(x)));
         }
@@ -628,6 +622,12 @@ impl Parser {
 
         if let Some(lookup) = self.lookup() {
             return Some(ExpressionNode::LookupNode(Box::new(lookup)));
+        };
+        
+        if let Some(token) = self.expect_type("NUMBER") {
+            let value = Fraction::from_str(&token.string_[..]).unwrap();
+            let value = FractionNode{value};
+            return Some(ExpressionNode::FractionNode(Box::new(value)));
         };
 
         None
