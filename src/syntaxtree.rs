@@ -8,6 +8,7 @@ pub enum ExpressionNode {
     FractionNode(Box<FractionNode>),
     LookupNode(Box<LookupNode>),
     BinopNode(Box<BinopNode>),
+    UniopNode(Box<UniopNode>),
     ArrayLiteralNode(Box<ArrayLiteralNode>)
 }
 
@@ -31,6 +32,12 @@ pub struct LookupNode {
 pub struct BinopNode {  
     pub lhs: ExpressionNode,
     pub rhs: ExpressionNode,
+    pub op: interpreter::Instruction
+}
+
+#[derive(Clone, Debug)]
+pub struct UniopNode {
+    pub expr: ExpressionNode,
     pub op: interpreter::Instruction
 }
 

@@ -325,6 +325,15 @@ impl ST::BinopNode {
     }
 }
 
+impl ST::UniopNode {
+    fn from(node: PT::UniopNode, ctx: &mut SyntaxContext) -> ST::UniopNode {
+        ST::UniopNode{
+            expr: ST::ExpressionNode::from(node.expr, ctx),
+            op: node.op
+        }
+    }
+}
+
 impl ST::ArrayLiteralNode {
     fn from(node: PT::ArrayLiteralNode, ctx: &mut SyntaxContext) -> ST::ArrayLiteralNode {
         ST::ArrayLiteralNode{
@@ -358,7 +367,7 @@ impl ST::ExpressionNode {
                         ST::ExpressionNode::$x(Box::new(ST::$x::from(*valbox, ctx)))
                     ,)*
         }   }   }
-        passthrough! {FractionNode, BinopNode, ArrayLiteralNode, LookupNode}
+        passthrough! {FractionNode, BinopNode, ArrayLiteralNode, LookupNode, UniopNode}
     }
 }
 

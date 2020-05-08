@@ -6,6 +6,7 @@ use std::fmt;
 use std::cell::{RefCell, Ref};
 use std::mem::replace;
 use num_traits::cast::ToPrimitive;
+use num_traits::identities::{Zero, One};
 use std::ops::Index;
 use std::rc::Rc;
 use num_bigint::BigInt;
@@ -33,7 +34,7 @@ impl fmt::Debug for Variable {
 impl Variable {
     fn to_bool(&self) -> bool {
         match self {
-            Variable::Frac(value) => *value.numer() != BigInt::from(0),
+            Variable::Frac(value) => !value.is_zero(),
             Variable::Array(items) => items.len() > 0
         }
     }
@@ -81,10 +82,9 @@ pub enum Instruction {
     Store,
     Pull{register: usize},
     Push{register: usize},
-    BinopAdd,
-    BinopSub,
-    BinopMul,
-    BinopDiv,
+    BinopAdd, BinopSub, BinopMul, BinopDiv,
+    BinopIDiv, BinopMod, BinopPow,
+    UniopNeg, UniopNot,
     Reverse{idx: usize},
     Jump{delta: isize},
     JumpIfTrue{delta: isize},    
@@ -222,6 +222,11 @@ impl<'a> Interpreter<'a> {
                     Instruction::BinopSub => self.binop_sub(),
                     Instruction::BinopMul => self.binop_mul(),
                     Instruction::BinopDiv => self.binop_div(),
+                    Instruction::BinopMod => self.binop_mod(),
+                    Instruction::BinopIDiv => self.binop_idiv(),
+                    Instruction::BinopPow => self.binop_pow(),
+                    Instruction::UniopNeg => self.uniop_neg(),
+                    Instruction::UniopNot => self.uniop_not(),
                     Instruction::CreateArray{size} => self.create_array(*size),
                     Instruction::Jump{delta} => self.jump(*delta),
                     Instruction::JumpIfTrue{delta} => self.jump_if_true(*delta),
@@ -364,6 +369,36 @@ impl<'a> Interpreter<'a> {
     binop_method!(binop_sub, -);
     binop_method!(binop_mul, *);
     binop_method!(binop_div, /);
+    binop_method!(binop_mod, %);
+
+    fn binop_idiv(&mut self) {
+        unimplemented!();
+    }
+
+    fn binop_pow(&mut self) {
+        unimplemented!();
+    }
+
+    fn uniop_neg(&mut self) {
+        let expr = self.pop_var();
+        let result = match &*expr.borrow() {
+            Variable::Frac(x) => Variable::Frac(-x),
+            Variable::Array(_) => panic!("Takinging the negative of an array"),
+        };
+        self.stack.push(StackObject::Var(Rc::new(RefCell::new(result))));
+    }
+
+    fn uniop_not(&mut self) {
+        let expr = self.pop_var();
+        let result = if expr.borrow().to_bool() {
+            Variable::Frac(Fraction::zero())
+        } else {
+            Variable::Frac(Fraction::one())
+        };
+        self.stack.push(
+            StackObject::Var(Rc::new(RefCell::new(result)))
+        );
+    }
     
     fn pull(&mut self, register: usize) {
         let new_var = match &mut *self.pop_var().borrow_mut() {
@@ -389,7 +424,7 @@ impl<'a> Interpreter<'a> {
             Variable::Frac(_) => panic!("Pushing onto number")
         }
     }
-    
+
     #[inline]
     fn pop(&mut self) -> StackObject {
         self.stack.pop().expect("Popped off empty stack")

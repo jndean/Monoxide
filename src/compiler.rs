@@ -104,6 +104,7 @@ impl ST::ExpressionNode {
             ST::ExpressionNode::FractionNode(valbox) => valbox.compile(),
             ST::ExpressionNode::LookupNode(valbox) => valbox.compile(),
             ST::ExpressionNode::BinopNode(valbox) => valbox.compile(),
+            ST::ExpressionNode::UniopNode(valbox) => valbox.compile(),
             ST::ExpressionNode::ArrayLiteralNode(valbox) => valbox.compile()
         }
     }
@@ -136,6 +137,16 @@ impl ST::BinopNode {
         let mut ret = Vec::new();
         ret.extend(self.lhs.compile());
         ret.extend(self.rhs.compile());
+        ret.push(self.op.clone());
+        ret
+    }
+}
+
+
+impl ST::UniopNode {
+    pub fn compile(&self) -> Vec<Instruction> {
+        let mut ret = Vec::new();
+        ret.extend(self.expr.compile());
         ret.push(self.op.clone());
         ret
     }
