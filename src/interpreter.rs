@@ -14,6 +14,12 @@ use num_bigint::BigInt;
 
 pub type Fraction = num_rational::BigRational;
 
+fn fraction_to_f64(x: &Fraction) -> f64 {
+    match (x.numer().to_f64(), x.denom().to_f64()) {
+        (Some(n), Some(d)) => n/d,
+        _ => panic!("Rationals exceed f64 precision")
+    }
+}
 
 #[derive(PartialEq, Clone)]
 pub enum Variable {
@@ -158,9 +164,9 @@ macro_rules! binop_method {
                     Variable::Frac(left $op right)
                 },
                 (Variable::Array(_), Variable::Array(_)) => {
-                    unimplemented!()
+                    unimplemented!();
                 },
-                _ => panic!("Adding incompatible types")
+                _ => panic!("Applying binop \"{}\" to incompatible types", stringify!(op))
             };
             self.stack.push(StackObject::Var(Rc::new(RefCell::new(result))));
         }
@@ -372,11 +378,29 @@ impl<'a> Interpreter<'a> {
     binop_method!(binop_mod, %);
 
     fn binop_idiv(&mut self) {
-        unimplemented!();
+        let rhs = self.pop_var();
+        let lhs = self.pop_var();
+        let result = match (&*lhs.borrow(), &*rhs.borrow()) {
+            (Variable::Frac(left), Variable::Frac(right)) => {
+                Variable::Frac((left/right).trunc())
+            },
+            _ => panic!("Applying binop \"//\" to incompatible types")
+        };
+        self.stack.push(StackObject::Var(Rc::new(RefCell::new(result))));
     }
 
     fn binop_pow(&mut self) {
-        unimplemented!();
+        let rhs = self.pop_var();
+        let lhs = self.pop_var();
+        let result = match (&*lhs.borrow(), &*rhs.borrow()) {
+            (Variable::Frac(left), Variable::Frac(right)) => {
+                let value = fraction_to_f64(left).powf(fraction_to_f64(right));
+                let value = Fraction::from_float(value).expect("Computing power created an infinite float");
+                Variable::Frac(value)
+            },
+            _ => panic!("Applying binop \"**\" to incompatible types")
+        };
+        self.stack.push(StackObject::Var(Rc::new(RefCell::new(result))));
     }
 
     fn uniop_neg(&mut self) {

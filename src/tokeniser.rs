@@ -20,7 +20,7 @@ pub fn tokenise(data: &String) -> Vec<Token> {
     let symbol_regex = regex::Regex::new(&(String::from(r"^(")
     + r"\+=|\-=|\*=|/="
     + r"|<=|>=|!=|=="
-    + r"|:=|=:|=>"
+    + r"|:=|=:|=>|//|\*\*"
     + r"|\+|\-|\*|/"
     + r"|=|<|>"
     + r"|\[|\]|\(|\)|\{|\}"
