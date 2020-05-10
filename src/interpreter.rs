@@ -194,7 +194,7 @@ impl<'a> Interpreter<'a> {
 
     pub fn execute(&mut self) -> () {
 
-        'instruction_loop: loop{
+        'refresh_instructions: loop{
 
             let instructions = if self.forwards {&self.code.fwd} 
                                else             {&self.code.bkwd};
@@ -205,10 +205,10 @@ impl<'a> Interpreter<'a> {
                     Some(inst) => inst,
                     None => {
                         if self.scope_stack.is_empty() { 
-                            break 'instruction_loop;
+                            break 'refresh_instructions;
                         } else {
                             self.end_call(); 
-                            continue 'instruction_loop;
+                            continue 'refresh_instructions;
                         };
                     }
                 };
@@ -239,14 +239,14 @@ impl<'a> Interpreter<'a> {
                     Instruction::JumpIfFalse{delta} => self.jump_if_false(*delta),
                     Instruction::Pull{register} => self.pull(*register),
                     Instruction::Push{register} => self.push(*register),
-                    Instruction::Call{idx} => {self.call(*idx, true); continue 'instruction_loop},
-                    Instruction::Uncall{idx} => {self.call(*idx, false); continue 'instruction_loop},
+                    Instruction::Call{idx} => {self.call(*idx, true); continue 'refresh_instructions},
+                    Instruction::Uncall{idx} => {self.call(*idx, false); continue 'refresh_instructions},
                     Instruction::Reverse{idx} => {
                         self.forwards = !self.forwards;
                         self.ip = *idx;
-                        continue 'instruction_loop;
+                        continue 'refresh_instructions;
                     }
-                    Instruction::Quit => break 'instruction_loop,
+                    Instruction::Quit => break 'refresh_instructions,
                     Instruction::DebugPrint => self.debug_print(),
                 }
                 

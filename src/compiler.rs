@@ -171,6 +171,7 @@ impl ST::StatementNode {
             ST::StatementNode::LetUnletNode(valbox) => valbox.compile(),
             ST::StatementNode::RefUnrefNode(valbox) => valbox.compile(),
             ST::StatementNode::IfNode(valbox) => valbox.compile(),
+            ST::StatementNode::WhileNode(valbox) => valbox.compile(),
             ST::StatementNode::ModopNode(valbox) => valbox.compile(),
             ST::StatementNode::PushPullNode(valbox) => valbox.compile(),
             ST::StatementNode::CatchNode(valbox) => valbox.compile(),
@@ -312,6 +313,48 @@ impl ST::IfNode {
         code
     }
 }
+
+
+impl ST::WhileNode {
+    pub fn compile(&self) -> Code {
+        let fwd_expr = self.fwd_expr.compile();
+        let bkwd_expr = self.bkwd_expr.clone().unwrap().compile();
+        let mut stmts = Code::new();
+        for stmt in self.stmts.iter() {
+            stmts.extend(stmt.compile());
+        }
+
+        let stmts_fwd_len = stmts.fwd_len() as isize;
+        let stmts_bkwd_len = stmts.bkwd_len() as isize;
+        let fwd_expr_len = fwd_expr.len() as isize;
+        let bkwd_expr_len = bkwd_expr.len() as isize;
+
+        let mut code = Code::new();
+        
+        code.append_fwd(fwd_expr);
+        
+        code.push_fwd(Instruction::JumpIfFalse{
+            delta: stmts_fwd_len + 1
+        });
+        code.push_bkwd(Instruction::Jump{
+            delta: -stmts_bkwd_len - bkwd_expr_len - 2
+        });
+
+        code.extend(stmts);
+
+        code.push_fwd(Instruction::Jump{
+            delta: -stmts_fwd_len - fwd_expr_len - 2
+        });
+        code.push_bkwd(Instruction::JumpIfFalse{
+            delta: stmts_bkwd_len + 1
+        });
+
+        code.append_bkwd(bkwd_expr);
+
+        code
+    }
+}
+
 
 impl ST::CatchNode {
     pub fn compile(&self) -> Code {

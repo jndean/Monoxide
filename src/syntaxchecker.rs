@@ -432,6 +432,15 @@ impl ST::IfNode {
     }
 }
 
+impl ST::WhileNode {
+    fn from(node: PT::WhileNode, ctx: &mut SyntaxContext) -> ST::WhileNode {
+        let fwd_expr = ST::ExpressionNode::from(node.fwd_expr, ctx);
+        let bkwd_expr = node.bkwd_expr.map(|x| ST::ExpressionNode::from(x, ctx));
+        let stmts = node.stmts.into_iter().map(|s| ST::StatementNode::from(s, ctx)).collect();
+        ST::WhileNode{fwd_expr, stmts, bkwd_expr}
+    }
+}
+
 impl ST::CatchNode {
     fn from(node: PT::CatchNode, ctx: &mut SyntaxContext) -> ST::CatchNode {
         ST::CatchNode{expr: ST::ExpressionNode::from(node.expr, ctx)}
@@ -635,7 +644,7 @@ impl ST::StatementNode {
         }   }   }
         passthrough! {
             LetUnletNode, RefUnrefNode, ModopNode, IfNode, CatchNode,
-            CallNode, PushPullNode
+            CallNode, PushPullNode, WhileNode
         }
     }
 }

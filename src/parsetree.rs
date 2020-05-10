@@ -54,6 +54,7 @@ pub enum StatementNode {
     LetUnletNode(Box<LetUnletNode>),
     RefUnrefNode(Box<RefUnrefNode>),
     IfNode(Box<IfNode>),
+    WhileNode(Box<WhileNode>),
     ModopNode(Box<ModopNode>),
     CatchNode(Box<CatchNode>),
     CallNode(Box<CallNode>),
@@ -94,6 +95,13 @@ pub struct IfNode {
     pub if_stmts: Vec<StatementNode>,
     pub else_stmts: Vec<StatementNode>,
     pub bkwd_expr: ExpressionNode
+}
+
+#[derive(Clone, Debug)]
+pub struct WhileNode {
+    pub fwd_expr: ExpressionNode,
+    pub stmts: Vec<StatementNode>,
+    pub bkwd_expr: Option<ExpressionNode>
 }
 
 #[derive(Clone, Debug)]

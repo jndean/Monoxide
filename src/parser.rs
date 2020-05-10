@@ -7,7 +7,7 @@ use crate::parsetree::{
     StatementNode, ExpressionNode, LookupNode, LetUnletNode,
     FractionNode, BinopNode, IfNode, ModopNode, FunctionNode,
     CatchNode, ArrayLiteralNode, Module, RefUnrefNode, CallNode,
-    FunctionParam, PushPullNode, UniopNode
+    FunctionParam, PushPullNode, UniopNode, WhileNode
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -326,6 +326,7 @@ impl Parser {
         if let Some(stmt) = self.modop_stmt() {return Some(stmt);}
         if let Some(stmt) = self.pull_stmt() {return Some(stmt);}
         if let Some(stmt) = self.if_stmt() {return Some(stmt);}
+        if let Some(stmt) = self.while_stmt() {return Some(stmt);}
         if let Some(stmt) = self.catch_stmt() {return Some(stmt);}
         if let Some(stmt) = self.call_stmt() {return Some(stmt);}
         None
@@ -414,9 +415,33 @@ impl Parser {
         None
     }
 
+    memoise!(while_stmt_ as while_stmt -> StatementNode);
+    pub fn while_stmt_(&mut self) -> Option<StatementNode> {
+        parse!(self;
+            "while",
+            "(",
+            fwd_expr : self.expression(),
+            ")",
+            "{",
+            stmts : self.repeat(Parser::statement, true),
+            "}",
+            "~",
+            "while",
+            "(",
+            ?bkwd_expr : self.expression(),
+            ")",
+            ";",
+            {
+                return Some(StatementNode::WhileNode(Box::new(
+                    WhileNode{fwd_expr, stmts, bkwd_expr}
+                )));
+            }
+        );
+        None
+    }
+
     memoise!(if_stmt_ as if_stmt -> StatementNode);
     pub fn if_stmt_(&mut self) -> Option<StatementNode> {
-
         parse!(self;
             "if",
             "(",
@@ -444,40 +469,8 @@ impl Parser {
                 return Some(StatementNode::IfNode(Box::new(
                     IfNode{fwd_expr, if_stmts, else_stmts, bkwd_expr}
                 )));
-
             }
-
         );
-        let pos = self.mark();
-
-        if self.expect_literal("if") {
-        if self.expect_literal("(") {
-        if let Some(fwd_expr) = self.expression() {
-        if self.expect_literal(")") {
-        if self.expect_literal("{") {
-        if let Some(if_stmts) = self.statements() {
-        if self.expect_literal("}") {
-        let else_stmts = self.else_block();
-        if self.expect_literal("~") {
-        if self.expect_literal("if") {
-        if self.expect_literal("(") {
-        let bkwd_expr = self.expression();
-        if self.expect_literal(")") {
-        if self.expect_literal(";") {
-            let else_stmts = match else_stmts {
-                Some(stmts) => stmts,
-                None => Vec::new()
-            };
-            let bkwd_expr = match bkwd_expr {
-                Some(expr) => expr,
-                None => fwd_expr.clone()
-            };
-            return Some(StatementNode::IfNode(Box::new(
-                IfNode{fwd_expr, if_stmts, else_stmts, bkwd_expr}
-            )));
-        }}}}}}}}}}}};
-
-        self.reset(pos);
         None
     }
 
