@@ -19,26 +19,30 @@ pub struct FractionNode {
 
 #[derive(Clone, Debug)]
 pub struct ArrayLiteralNode {
-    pub items: Vec<ExpressionNode>
+    pub items: Vec<ExpressionNode>,
+    pub is_mono: bool
 }
 
 #[derive(Clone, Debug)]
 pub struct LookupNode {
     pub register: usize,
-    pub indices: Vec<ExpressionNode>
+    pub indices: Vec<ExpressionNode>,
+    pub is_mono: bool
 }
 
 #[derive(Clone, Debug)]
 pub struct BinopNode {  
     pub lhs: ExpressionNode,
     pub rhs: ExpressionNode,
-    pub op: interpreter::Instruction
+    pub op: interpreter::Instruction,
+    pub is_mono: bool
 }
 
 #[derive(Clone, Debug)]
 pub struct UniopNode {
     pub expr: ExpressionNode,
-    pub op: interpreter::Instruction
+    pub op: interpreter::Instruction,
+    pub is_mono: bool
 }
 
 

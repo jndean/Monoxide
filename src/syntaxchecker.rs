@@ -317,41 +317,40 @@ impl ST::FractionNode {
 
 impl ST::BinopNode {
     fn from(node: PT::BinopNode, ctx: &mut SyntaxContext) -> ST::BinopNode {
-        ST::BinopNode{
-            lhs: ST::ExpressionNode::from(node.lhs, ctx),
-            rhs: ST::ExpressionNode::from(node.rhs, ctx),
-            op: node.op
-        }
+        let lhs = ST::ExpressionNode::from(node.lhs, ctx);
+        let rhs = ST::ExpressionNode::from(node.rhs, ctx);
+        let is_mono = lhs.is_mono() || rhs.is_mono();
+        ST::BinopNode{lhs, rhs, is_mono, op: node.op}
     }
 }
 
 impl ST::UniopNode {
     fn from(node: PT::UniopNode, ctx: &mut SyntaxContext) -> ST::UniopNode {
-        ST::UniopNode{
-            expr: ST::ExpressionNode::from(node.expr, ctx),
-            op: node.op
-        }
+        let expr = ST::ExpressionNode::from(node.expr, ctx);
+        let is_mono = expr.is_mono();
+        ST::UniopNode{expr, is_mono, op: node.op}
     }
 }
 
 impl ST::ArrayLiteralNode {
     fn from(node: PT::ArrayLiteralNode, ctx: &mut SyntaxContext) -> ST::ArrayLiteralNode {
-        ST::ArrayLiteralNode{
-            items: node.items.into_iter()
-                             .map(|i| ST::ExpressionNode::from(i, ctx))
-                             .collect()
-        }
+        let items = node.items.into_iter()
+                              .map(|i| ST::ExpressionNode::from(i, ctx))
+                              .collect::<Vec<ST::ExpressionNode>>();
+        let is_mono = items.iter().any(|x| x.is_mono());
+        ST::ArrayLiteralNode{items, is_mono}
     }
 }
 
 impl ST::LookupNode {
     fn from(node: PT::LookupNode, ctx: &mut SyntaxContext) -> ST::LookupNode {
-        ST::LookupNode{
-            register: ctx.lookup_variable(&node.name).register,
-            indices: node.indices.into_iter()
-                                 .map(|i| ST::ExpressionNode::from(i, ctx))
-                                 .collect()
-        }
+        let register = ctx.lookup_variable(&node.name).register;
+        let indices = node.indices.into_iter()
+                                  .map(|i| ST::ExpressionNode::from(i, ctx))
+                                  .collect::<Vec<ST::ExpressionNode>>();
+        let is_mono = node.name.starts_with(".")
+                    || indices.iter().any(|x| x.is_mono());
+        ST::LookupNode{register, indices, is_mono}
     }
 }
 
@@ -368,6 +367,16 @@ impl ST::ExpressionNode {
                     ,)*
         }   }   }
         passthrough! {FractionNode, BinopNode, ArrayLiteralNode, LookupNode, UniopNode}
+    }
+
+    fn is_mono(&self) -> bool {
+        match self {
+            ST::ExpressionNode::FractionNode(_) => false,
+            ST::ExpressionNode::ArrayLiteralNode(x) => x.is_mono,
+            ST::ExpressionNode::BinopNode(x) => x.is_mono,
+            ST::ExpressionNode::LookupNode(x) => x.is_mono,
+            ST::ExpressionNode::UniopNode(x) => x.is_mono
+        }
     }
 }
 
