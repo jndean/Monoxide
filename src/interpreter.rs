@@ -36,7 +36,6 @@ impl fmt::Debug for Variable {
     }
 }
 
-
 impl Variable {
     fn to_bool(&self) -> bool {
         match self {
@@ -89,6 +88,9 @@ pub enum Instruction {
     Pull{register: usize},
     Push{register: usize},
     BinopAdd, BinopSub, BinopMul, BinopDiv,
+    BinopOr, BinopAnd, BinopXor, 
+    BinopLeq, BinopGeq, BinopLess, BinopGreat,
+    BinopEq, BinopNeq,
     BinopIDiv, BinopMod, BinopPow,
     UniopNeg, UniopNot,
     Reverse{idx: usize},
@@ -166,9 +168,39 @@ macro_rules! binop_method {
                 (Variable::Array(_), Variable::Array(_)) => {
                     unimplemented!();
                 },
-                _ => panic!("Applying binop \"{}\" to incompatible types", stringify!(op))
+                _ => panic!("Applying binop \"{}\" to incompatible types", stringify!($op))
             };
             self.stack.push(StackObject::Var(Rc::new(RefCell::new(result))));
+        }
+    };
+}
+
+macro_rules! bincomp_method {
+    ($name:ident, $op:tt) => {
+        fn $name (&mut self) {
+            let rhs = self.pop_var();
+            let lhs = self.pop_var();
+            let result = match (&*lhs.borrow(), &*rhs.borrow()) {
+                (Variable::Frac(left), Variable::Frac(right)) => {
+                    if left $op right {Variable::Frac(Fraction::one())}
+                    else              {Variable::Frac(Fraction::zero())}
+                },
+                _ => panic!("Applying binop \"{}\" to incompatible types", stringify!($op))
+            };
+            self.stack.push(StackObject::Var(Rc::new(RefCell::new(result))));
+        }
+    };
+}
+
+macro_rules! binlogic_method {
+    ($name:ident, $op:tt) => {
+        fn $name (&mut self) {
+            let rhs = self.pop_var();
+            let lhs = self.pop_var();
+            let result = lhs.borrow().to_bool() $op rhs.borrow().to_bool();
+            let var = if result {Variable::Frac(Fraction::one())}
+                      else      {Variable::Frac(Fraction::zero())};
+            self.stack.push(StackObject::Var(Rc::new(RefCell::new(var))));
         }
     };
 }
@@ -231,6 +263,15 @@ impl<'a> Interpreter<'a> {
                     Instruction::BinopMod => self.binop_mod(),
                     Instruction::BinopIDiv => self.binop_idiv(),
                     Instruction::BinopPow => self.binop_pow(),
+                    Instruction::BinopLess => self.binop_less(),
+                    Instruction::BinopLeq => self.binop_leq(),
+                    Instruction::BinopGreat => self.binop_great(),
+                    Instruction::BinopGeq => self.binop_geq(),
+                    Instruction::BinopEq => self.binop_eq(),
+                    Instruction::BinopNeq => self.binop_neq(),
+                    Instruction::BinopAnd => self.binop_and(),
+                    Instruction::BinopOr => self.binop_or(),
+                    Instruction::BinopXor => self.binop_xor(),
                     Instruction::UniopNeg => self.uniop_neg(),
                     Instruction::UniopNot => self.uniop_not(),
                     Instruction::CreateArray{size} => self.create_array(*size),
@@ -377,6 +418,15 @@ impl<'a> Interpreter<'a> {
     binop_method!(binop_div, /);
     binop_method!(binop_mod, %);
 
+    bincomp_method!(binop_less,  < );
+    bincomp_method!(binop_leq,   <=);
+    bincomp_method!(binop_great, > );
+    bincomp_method!(binop_geq,   >=);
+    
+    binlogic_method!(binop_and, &&);
+    binlogic_method!(binop_or,  ||);
+    binlogic_method!(binop_xor, ^) ;
+
     fn binop_idiv(&mut self) {
         let rhs = self.pop_var();
         let lhs = self.pop_var();
@@ -403,6 +453,24 @@ impl<'a> Interpreter<'a> {
         self.stack.push(StackObject::Var(Rc::new(RefCell::new(result))));
     }
 
+    fn binop_eq(&mut self) {
+        let rhs = self.pop_var();
+        let lhs = self.pop_var();
+        let value = if *lhs.borrow() == *rhs.borrow() {Fraction::one()}
+                    else                              {Fraction::zero()};
+        let var = Rc::new(RefCell::new(Variable::Frac(value)));
+        self.stack.push(StackObject::Var(var));
+    }
+
+    fn binop_neq(&mut self) {
+        let rhs = self.pop_var();
+        let lhs = self.pop_var();
+        let value = if *lhs.borrow() != *rhs.borrow() {Fraction::one()}
+                    else                              {Fraction::zero()};
+        let var = Rc::new(RefCell::new(Variable::Frac(value)));
+        self.stack.push(StackObject::Var(var));
+    }
+
     fn uniop_neg(&mut self) {
         let expr = self.pop_var();
         let result = match &*expr.borrow() {
@@ -423,7 +491,7 @@ impl<'a> Interpreter<'a> {
             StackObject::Var(Rc::new(RefCell::new(result)))
         );
     }
-    
+
     fn pull(&mut self, register: usize) {
         let new_var = match &mut *self.pop_var().borrow_mut() {
             Variable::Array(items) => match items.pop() {

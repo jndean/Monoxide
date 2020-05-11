@@ -599,10 +599,74 @@ impl Parser {
     pub fn expression_(&mut self) -> Option<ExpressionNode> {
         let pos = self.mark();
         
+        if let Some(lhs) = self.expression() {
+        if self.expect_literal("|") {
+        if let Some(rhs) = self.expr0() {
+            return Some(ExpressionNode::BinopNode(Box::new(
+                BinopNode{lhs, rhs, op: Instruction::BinopOr}
+            )));
+        }}};
         self.reset(pos);
-        self.expr3()
+
+        self.reset(pos);
+        self.expr0()
     }
 
+    memoise_recursive!(expr0_ as expr0 -> ExpressionNode);
+    pub fn expr0_(&mut self) -> Option<ExpressionNode> {
+        let pos = self.mark();
+
+        if let Some(lhs) = self.expr0() {
+        if self.expect_literal("&") {
+        if let Some(rhs) = self.expr1() {
+            return Some(ExpressionNode::BinopNode(Box::new(
+                BinopNode{lhs, rhs, op: Instruction::BinopAnd}
+            )));
+        }}};
+        self.reset(pos);
+
+        self.expr1()
+    }
+
+    memoise_recursive!(expr1_ as expr1 -> ExpressionNode);
+    pub fn expr1_(&mut self) -> Option<ExpressionNode> {
+        let pos = self.mark();
+
+        if let Some(lhs) = self.expr1() {
+        if self.expect_literal("^") {
+        if let Some(rhs) = self.expr2() {
+            return Some(ExpressionNode::BinopNode(Box::new(
+                BinopNode{lhs, rhs, op: Instruction::BinopXor}
+            )));
+        }}};
+        self.reset(pos);
+
+        self.expr2()
+    }
+    
+    memoise_recursive!(expr2_ as expr2 -> ExpressionNode);
+    pub fn expr2_(&mut self) -> Option<ExpressionNode> {
+        let pos = self.mark();
+
+        if let Some(lhs) = self.expr2() {
+        let instruction_match =
+            if      self.expect_literal("<")  {Some(Instruction::BinopLess)}
+            else if self.expect_literal("<=") {Some(Instruction::BinopLeq)}
+            else if self.expect_literal(">")  {Some(Instruction::BinopGreat)}
+            else if self.expect_literal(">=") {Some(Instruction::BinopGeq)}
+            else if self.expect_literal("!=") {Some(Instruction::BinopNeq)}
+            else if self.expect_literal("==") {Some(Instruction::BinopEq)}
+            else                              {None};
+        if let Some(instruction) = instruction_match {
+        if let Some(rhs) = self.expr3() {
+            return Some(ExpressionNode::BinopNode(Box::new(
+                BinopNode{lhs, rhs, op: instruction}
+            )));
+        }}};
+        self.reset(pos);
+
+        self.expr3()
+    }
     
     memoise_recursive!(expr3_ as expr3 -> ExpressionNode);
     pub fn expr3_(&mut self) -> Option<ExpressionNode> {
@@ -634,41 +698,17 @@ impl Parser {
         let pos = self.mark();
 
         if let Some(lhs) = self.expr4() {
-        if self.expect_literal("*") {
+        let instruction_match =
+            if      self.expect_literal("*")  {Some(Instruction::BinopMul)}
+            else if self.expect_literal("/")  {Some(Instruction::BinopDiv)}
+            else if self.expect_literal("//") {Some(Instruction::BinopIDiv)}
+            else if self.expect_literal("%")  {Some(Instruction::BinopMod)}
+            else                              {None};
+        if let Some(instruction) = instruction_match {
         if let Some(rhs) = self.expr5() {
             return Some(
                 ExpressionNode::BinopNode(Box::new(
-                    BinopNode{lhs, rhs, op: Instruction::BinopMul}
-            )));
-        }}};
-        self.reset(pos);
-
-        if let Some(lhs) = self.expr4() {
-        if self.expect_literal("/") {
-        if let Some(rhs) = self.expr5() {
-            return Some(
-                ExpressionNode::BinopNode(Box::new(
-                    BinopNode{lhs, rhs, op: Instruction::BinopDiv}
-            )));
-        }}};
-        self.reset(pos);
-
-        if let Some(lhs) = self.expr4() {
-        if self.expect_literal("//") {
-        if let Some(rhs) = self.expr5() {
-            return Some(
-                ExpressionNode::BinopNode(Box::new(
-                    BinopNode{lhs, rhs, op: Instruction::BinopIDiv}
-            )));
-        }}};
-        self.reset(pos);
-
-        if let Some(lhs) = self.expr4() {
-        if self.expect_literal("%") {
-        if let Some(rhs) = self.expr5() {
-            return Some(
-                ExpressionNode::BinopNode(Box::new(
-                    BinopNode{lhs, rhs, op: Instruction::BinopMod}
+                    BinopNode{lhs, rhs, op: instruction}
             )));
         }}};
         self.reset(pos);

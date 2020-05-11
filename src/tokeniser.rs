@@ -24,7 +24,7 @@ pub fn tokenise(data: &String) -> Vec<Token> {
     + r"|\+|\-|\*|/"
     + r"|=|<|>"
     + r"|\[|\]|\(|\)|\{|\}"
-    + r"|;|~|#|,|&|!|%"
+    + r"|;|~|#|,|&|!|%|\||\^"
     + r")")).unwrap();
 
     let mut ret = Vec::new();
