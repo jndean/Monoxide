@@ -9,7 +9,6 @@ use num_traits::cast::ToPrimitive;
 use num_traits::identities::{Zero, One};
 use std::ops::Index;
 use std::rc::Rc;
-use num_bigint::BigInt;
 
 
 pub type Fraction = num_rational::BigRational;

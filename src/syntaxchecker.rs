@@ -303,6 +303,10 @@ impl<'a> SyntaxContext<'a> {
         let num_interiors = varref.var.interiors.borrow().len();
         num_interiors == 0 || (num_interiors == 1 && varref.is_interior)
     }
+
+    fn get_var_id(&self, name: &str) -> usize {
+        self.lookup_variable(name).var.id
+    }
 }
 
 
@@ -311,7 +315,7 @@ impl ST::FractionNode {
         let const_idx = ctx.add_const(
             interpreter::Variable::Frac(node.value)
         );
-        ST::FractionNode{const_idx}
+        ST::FractionNode{const_idx, used_vars: HashSet::new()}
     }
 }
 
@@ -320,7 +324,10 @@ impl ST::BinopNode {
         let lhs = ST::ExpressionNode::from(node.lhs, ctx);
         let rhs = ST::ExpressionNode::from(node.rhs, ctx);
         let is_mono = lhs.is_mono() || rhs.is_mono();
-        ST::BinopNode{lhs, rhs, is_mono, op: node.op}
+        let used_vars = lhs.used_vars().iter()
+                        .chain(rhs.used_vars().iter())
+                        .cloned().collect();
+        ST::BinopNode{lhs, rhs, is_mono, used_vars, op: node.op}
     }
 }
 
@@ -328,7 +335,8 @@ impl ST::UniopNode {
     fn from(node: PT::UniopNode, ctx: &mut SyntaxContext) -> ST::UniopNode {
         let expr = ST::ExpressionNode::from(node.expr, ctx);
         let is_mono = expr.is_mono();
-        ST::UniopNode{expr, is_mono, op: node.op}
+        let used_vars = expr.used_vars().clone();
+        ST::UniopNode{expr, is_mono, used_vars, op: node.op}
     }
 }
 
@@ -338,7 +346,10 @@ impl ST::ArrayLiteralNode {
                               .map(|i| ST::ExpressionNode::from(i, ctx))
                               .collect::<Vec<ST::ExpressionNode>>();
         let is_mono = items.iter().any(|x| x.is_mono());
-        ST::ArrayLiteralNode{items, is_mono}
+        let used_vars = items.iter().map(|x| x.used_vars())
+                                    .flat_map(|it| it.clone())
+                                    .collect();
+        ST::ArrayLiteralNode{items, used_vars, is_mono}
     }
 }
 
@@ -350,7 +361,11 @@ impl ST::LookupNode {
                                   .collect::<Vec<ST::ExpressionNode>>();
         let is_mono = node.name.starts_with(".")
                     || indices.iter().any(|x| x.is_mono());
-        ST::LookupNode{register, indices, is_mono}
+        let mut used_vars = indices.iter().map(|x| x.used_vars())
+                                          .flat_map(|it| it.clone())
+                                          .collect::<HashSet<_>>();
+        used_vars.insert(ctx.get_var_id(&node.name));
+        ST::LookupNode{register, indices, used_vars, is_mono}
     }
 }
 
@@ -376,6 +391,16 @@ impl ST::ExpressionNode {
             ST::ExpressionNode::BinopNode(x) => x.is_mono,
             ST::ExpressionNode::LookupNode(x) => x.is_mono,
             ST::ExpressionNode::UniopNode(x) => x.is_mono
+        }
+    }
+
+    fn used_vars(&self) -> &HashSet<usize> {
+        match self {
+            ST::ExpressionNode::FractionNode(x) => &x.used_vars,
+            ST::ExpressionNode::ArrayLiteralNode(x) => &x.used_vars,
+            ST::ExpressionNode::BinopNode(x) => &x.used_vars,
+            ST::ExpressionNode::LookupNode(x) => &x.used_vars,
+            ST::ExpressionNode::UniopNode(x) => &x.used_vars
         }
     }
 }

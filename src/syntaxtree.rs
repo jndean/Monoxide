@@ -1,4 +1,5 @@
 
+use std::collections::HashSet;
 
 use crate::interpreter;
 
@@ -14,20 +15,23 @@ pub enum ExpressionNode {
 
 #[derive(Clone, Debug)]
 pub struct FractionNode {
-    pub const_idx: usize
+    pub const_idx: usize,
+    pub used_vars: HashSet<usize>
 }
 
 #[derive(Clone, Debug)]
 pub struct ArrayLiteralNode {
     pub items: Vec<ExpressionNode>,
-    pub is_mono: bool
+    pub is_mono: bool,
+    pub used_vars: HashSet<usize>
 }
 
 #[derive(Clone, Debug)]
 pub struct LookupNode {
     pub register: usize,
     pub indices: Vec<ExpressionNode>,
-    pub is_mono: bool
+    pub is_mono: bool,
+    pub used_vars: HashSet<usize>
 }
 
 #[derive(Clone, Debug)]
@@ -35,14 +39,16 @@ pub struct BinopNode {
     pub lhs: ExpressionNode,
     pub rhs: ExpressionNode,
     pub op: interpreter::Instruction,
-    pub is_mono: bool
+    pub is_mono: bool,
+    pub used_vars: HashSet<usize>
 }
 
 #[derive(Clone, Debug)]
 pub struct UniopNode {
     pub expr: ExpressionNode,
     pub op: interpreter::Instruction,
-    pub is_mono: bool
+    pub is_mono: bool,
+    pub used_vars: HashSet<usize>
 }
 
 
