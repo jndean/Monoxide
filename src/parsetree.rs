@@ -8,7 +8,7 @@ use crate::syntaxtree as ST;
 
 
 pub trait Expression: fmt::Debug + ExpressionClone {
-    fn checkSyntax(self: Box<Self>, ctx: &mut syntaxchecker::SyntaxContext) -> Box<dyn ST::Expression>;
+    fn to_syntax_node(self: Box<Self>, ctx: &mut syntaxchecker::SyntaxContext) -> Box<dyn ST::Expression>;
 }
 
 pub type ExpressionNode = Box<dyn Expression>;
@@ -65,7 +65,7 @@ pub struct UniopNode {
 
 
 pub trait Statement: fmt::Debug + StatementClone {
-    fn checkSyntax(
+    fn to_syntax_node(
         self: Box<Self>,
         ctx: &mut syntaxchecker::SyntaxContext
     ) -> Box<dyn ST::Statement>;
