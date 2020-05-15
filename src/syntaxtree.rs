@@ -1,17 +1,18 @@
 
 use std::collections::HashSet;
+use std::fmt::Debug;
 
 use crate::interpreter;
+use crate::compiler;
 
 
-#[derive(Clone, Debug)]
-pub enum ExpressionNode {
-    FractionNode(Box<FractionNode>),
-    LookupNode(Box<LookupNode>),
-    BinopNode(Box<BinopNode>),
-    UniopNode(Box<UniopNode>),
-    ArrayLiteralNode(Box<ArrayLiteralNode>)
+pub trait Expression: Debug {
+    fn is_mono(&self) -> bool;
+    fn used_vars(&self) -> &HashSet<usize>;
+    fn compile(&self) -> Vec<interpreter::Instruction>;
 }
+
+pub type ExpressionNode = Box<dyn Expression>;
 
 #[derive(Clone, Debug)]
 pub struct FractionNode {
@@ -19,14 +20,14 @@ pub struct FractionNode {
     pub used_vars: HashSet<usize>
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ArrayLiteralNode {
     pub items: Vec<ExpressionNode>,
     pub is_mono: bool,
     pub used_vars: HashSet<usize>
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct LookupNode {
     pub register: usize,
     pub indices: Vec<ExpressionNode>,
@@ -34,7 +35,7 @@ pub struct LookupNode {
     pub used_vars: HashSet<usize>
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct BinopNode {  
     pub lhs: ExpressionNode,
     pub rhs: ExpressionNode,
@@ -43,7 +44,7 @@ pub struct BinopNode {
     pub used_vars: HashSet<usize>
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct UniopNode {
     pub expr: ExpressionNode,
     pub op: interpreter::Instruction,
@@ -52,47 +53,42 @@ pub struct UniopNode {
 }
 
 
-#[derive(Clone, Debug)]
-pub enum StatementNode {
-    LetUnletNode(Box<LetUnletNode>),
-    RefUnrefNode(Box<RefUnrefNode>),
-    IfNode(Box<IfNode>),
-    WhileNode(Box<WhileNode>),
-    PushPullNode(Box<PushPullNode>),
-    ModopNode(Box<ModopNode>),
-    CatchNode(Box<CatchNode>),
-    CallNode(Box<CallNode>)
+
+pub trait Statement: Debug {
+    fn compile(&self) -> compiler::Code;
 }
 
-#[derive(Clone, Debug)]
+pub type StatementNode = Box<dyn Statement>;
+
+#[derive(Debug)]
 pub struct LetUnletNode {
     pub is_unlet: bool,
     pub register: usize,
     pub rhs: ExpressionNode
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct RefUnrefNode {
     pub is_unref: bool,
     pub register: usize,
     pub rhs: LookupNode
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ModopNode {
     pub lookup: LookupNode,
     pub op: interpreter::Instruction,
     pub rhs: ExpressionNode
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct PushPullNode {
     pub is_push: bool,
     pub register: usize,
     pub lookup: LookupNode
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct IfNode {
     pub fwd_expr: ExpressionNode,
     pub if_stmts: Vec<StatementNode>,
@@ -100,19 +96,19 @@ pub struct IfNode {
     pub bkwd_expr: ExpressionNode
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct WhileNode {
     pub fwd_expr: ExpressionNode,
     pub stmts: Vec<StatementNode>,
     pub bkwd_expr: Option<ExpressionNode>
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct CatchNode {
     pub expr: ExpressionNode
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct CallNode {
     pub is_uncall: bool,
     pub func_idx: usize,
@@ -139,7 +135,7 @@ pub struct FunctionPrototype {
     pub return_params: Vec<Option<ParamLink>>
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct FunctionNode {
     pub stmts: Vec<StatementNode>,
     pub consts: Vec<interpreter::Variable>,
@@ -150,7 +146,7 @@ pub struct FunctionNode {
     pub return_registers: Vec<usize>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Module {
     pub functions: Vec<FunctionNode>,
     pub main_idx: Option<usize>

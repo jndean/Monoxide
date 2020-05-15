@@ -2,15 +2,30 @@
 use std::fmt;
 
 use crate::interpreter;
+use crate::syntaxchecker;
+use crate::syntaxtree as ST;
 
 
-#[derive(Clone, Debug)]
-pub enum ExpressionNode {
-    FractionNode(Box<FractionNode>),
-    LookupNode(Box<LookupNode>),
-    BinopNode(Box<BinopNode>),
-    UniopNode(Box<UniopNode>),
-    ArrayLiteralNode(Box<ArrayLiteralNode>)
+
+pub trait Expression: fmt::Debug + ExpressionClone {
+    fn checkSyntax(self: Box<Self>, ctx: &mut syntaxchecker::SyntaxContext) -> Box<dyn ST::Expression>;
+}
+
+pub type ExpressionNode = Box<dyn Expression>;
+
+// This 'inbetween' trait allows us to implement Clone on Expression trait objects
+pub trait ExpressionClone {
+    fn clone_box(&self) ->ExpressionNode;
+}
+impl<T: 'static + Expression + Clone> ExpressionClone for T {
+    fn clone_box(&self) -> ExpressionNode {
+        Box::new(self.clone())
+    }
+}
+impl Clone for ExpressionNode {
+    fn clone(&self) -> ExpressionNode {
+        self.clone_box()
+    }
 }
 
 #[derive(Clone)]
@@ -49,16 +64,28 @@ pub struct UniopNode {
 }
 
 
-#[derive(Clone, Debug)]
-pub enum StatementNode {
-    LetUnletNode(Box<LetUnletNode>),
-    RefUnrefNode(Box<RefUnrefNode>),
-    IfNode(Box<IfNode>),
-    WhileNode(Box<WhileNode>),
-    ModopNode(Box<ModopNode>),
-    CatchNode(Box<CatchNode>),
-    CallNode(Box<CallNode>),
-    PushPullNode(Box<PushPullNode>)
+pub trait Statement: fmt::Debug + StatementClone {
+    fn checkSyntax(
+        self: Box<Self>,
+        ctx: &mut syntaxchecker::SyntaxContext
+    ) -> Box<dyn ST::Statement>;
+}
+
+pub type StatementNode = Box<dyn Statement>;
+
+// This 'inbetween' trait allows us to implement Clone on Statement trait objects
+pub trait StatementClone {
+    fn clone_box(&self) ->StatementNode;
+}
+impl<T: 'static + Statement + Clone> StatementClone for T {
+    fn clone_box(&self) -> StatementNode {
+        Box::new(self.clone())
+    }
+}
+impl Clone for StatementNode {
+    fn clone(&self) -> StatementNode {
+        self.clone_box()
+    }
 }
 
 #[derive(Clone, Debug)]

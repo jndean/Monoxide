@@ -387,9 +387,9 @@ impl Parser {
         let return_args = self.return_args();
         if self.expect_literal(";") {
             let name = name.string_;
-            return Some(StatementNode::CallNode(Box::new(
+            return Some(Box::new(
                 CallNode{is_uncall, name, borrow_args, stolen_args, return_args}
-            )));
+            ));
         }}}};
 
         self.reset(pos);
@@ -406,9 +406,9 @@ impl Parser {
         if let Some(expr) = self.expression() {
         if self.expect_literal(")") {
         if self.expect_literal(";") {
-            return Some(StatementNode::CatchNode(Box::new(
+            return Some(Box::new(
                 CatchNode{expr}
-            )));
+            ));
         }}}}};
 
         self.reset(pos);
@@ -432,9 +432,9 @@ impl Parser {
             ")",
             ";",
             {
-                return Some(StatementNode::WhileNode(Box::new(
+                return Some(Box::new(
                     WhileNode{fwd_expr, stmts, bkwd_expr}
-                )));
+                ));
             }
         );
         None
@@ -466,9 +466,9 @@ impl Parser {
                     Some(expr) => expr,
                     None => fwd_expr.clone()
                 };
-                return Some(StatementNode::IfNode(Box::new(
+                return Some(Box::new(
                     IfNode{fwd_expr, if_stmts, else_stmts, bkwd_expr}
-                )));
+                ));
             }
         );
         None
@@ -497,9 +497,9 @@ impl Parser {
         if self.expect_literal("<=") {
         if let Some(lookup) = self.lookup() {
         if self.expect_literal(";") {
-            return Some(StatementNode::PushPullNode(Box::new(
+            return Some(Box::new(
                 PushPullNode{is_push: false, name, lookup}
-            )));    
+            ));    
         }}}};
         self.reset(pos);
         
@@ -507,9 +507,9 @@ impl Parser {
         if self.expect_literal("=>") {
         if let Some(lookup) = self.lookup() {
         if self.expect_literal(";") {
-            return Some(StatementNode::PushPullNode(Box::new(
+            return Some(Box::new(
                 PushPullNode{is_push: true, name, lookup}
-            )));    
+            ));    
         }}}};
         self.reset(pos);
                     
@@ -524,9 +524,9 @@ impl Parser {
         if let Some(op) = self.modop() {
         if let Some(rhs) = self.expression() {
         if self.expect_literal(";") {
-            return Some(StatementNode::ModopNode(Box::new(
+            return Some(Box::new(
                 ModopNode{lookup, op, rhs}
-            )));
+            ));
         }}}};
 
         self.reset(pos);
@@ -542,9 +542,9 @@ impl Parser {
         if self.expect_literal("&") {
         if let Some(rhs) = self.lookup() {
         if self.expect_literal(";") {
-            return Some(StatementNode::RefUnrefNode(Box::new(
+            return Some(Box::new(
                 RefUnrefNode{name, rhs, is_unref: false}
-            )));
+            ));
         }}}}};
         self.reset(pos);
 
@@ -553,9 +553,9 @@ impl Parser {
         if self.expect_literal("&") {
         if let Some(rhs) = self.lookup() {
         if self.expect_literal(";") {
-            return Some(StatementNode::RefUnrefNode(Box::new(
+            return Some(Box::new(
                 RefUnrefNode{name, rhs, is_unref: true}
-            )));
+            ));
         }}}}};
         self.reset(pos);
 
@@ -573,9 +573,9 @@ impl Parser {
             rhs : self.expression(),
             ";",
             {
-                return Some(StatementNode::LetUnletNode(Box::new(
+                return Some(Box::new(
                     LetUnletNode{name, rhs, is_unlet: false}
-                )));
+                ));
             }
         );
 
@@ -585,9 +585,9 @@ impl Parser {
             rhs : self.expression(),
             ";",
             {
-                return Some(StatementNode::LetUnletNode(Box::new(
+                return Some(Box::new(
                     LetUnletNode{name, rhs, is_unlet: true}
-                )));
+                ));
             }
         );
      
@@ -602,9 +602,9 @@ impl Parser {
         if let Some(lhs) = self.expression() {
         if self.expect_literal("|") {
         if let Some(rhs) = self.expr0() {
-            return Some(ExpressionNode::BinopNode(Box::new(
+            return Some(Box::new(
                 BinopNode{lhs, rhs, op: Instruction::BinopOr}
-            )));
+            ));
         }}};
         self.reset(pos);
 
@@ -619,9 +619,9 @@ impl Parser {
         if let Some(lhs) = self.expr0() {
         if self.expect_literal("&") {
         if let Some(rhs) = self.expr1() {
-            return Some(ExpressionNode::BinopNode(Box::new(
+            return Some(Box::new(
                 BinopNode{lhs, rhs, op: Instruction::BinopAnd}
-            )));
+            ));
         }}};
         self.reset(pos);
 
@@ -635,9 +635,9 @@ impl Parser {
         if let Some(lhs) = self.expr1() {
         if self.expect_literal("^") {
         if let Some(rhs) = self.expr2() {
-            return Some(ExpressionNode::BinopNode(Box::new(
+            return Some(Box::new(
                 BinopNode{lhs, rhs, op: Instruction::BinopXor}
-            )));
+            ));
         }}};
         self.reset(pos);
 
@@ -659,9 +659,9 @@ impl Parser {
             else                              {None};
         if let Some(instruction) = instruction_match {
         if let Some(rhs) = self.expr3() {
-            return Some(ExpressionNode::BinopNode(Box::new(
+            return Some(Box::new(
                 BinopNode{lhs, rhs, op: instruction}
-            )));
+            ));
         }}};
         self.reset(pos);
 
@@ -675,18 +675,18 @@ impl Parser {
         if let Some(lhs) = self.expr3() {
         if self.expect_literal("+") {
         if let Some(rhs) = self.expr4() {
-            return Some(ExpressionNode::BinopNode(Box::new(
+            return Some(Box::new(
                 BinopNode{lhs, rhs, op: Instruction::BinopAdd}
-            )));
+            ));
         }}};
         self.reset(pos);
 
         if let Some(lhs) = self.expr3() {
         if self.expect_literal("-") {
         if let Some(rhs) = self.expr4() {
-            return Some(ExpressionNode::BinopNode(Box::new(
+            return Some(Box::new(
                 BinopNode{lhs, rhs, op: Instruction::BinopSub}
-            )));
+            ));
         }}};
         self.reset(pos);
 
@@ -706,10 +706,9 @@ impl Parser {
             else                              {None};
         if let Some(instruction) = instruction_match {
         if let Some(rhs) = self.expr5() {
-            return Some(
-                ExpressionNode::BinopNode(Box::new(
-                    BinopNode{lhs, rhs, op: instruction}
-            )));
+            return Some(Box::new(
+                BinopNode{lhs, rhs, op: instruction}
+            ));
         }}};
         self.reset(pos);
 
@@ -723,9 +722,9 @@ impl Parser {
         if let Some(lhs) = self.expr5() {
         if self.expect_literal("**") {
         if let Some(rhs) = self.atom() {
-            return Some(ExpressionNode::BinopNode(Box::new(
+            return Some(Box::new(
                 BinopNode{lhs, rhs, op: Instruction::BinopPow}
-            )));
+            ));
         }}};
         self.reset(pos);
 
@@ -743,33 +742,33 @@ impl Parser {
         }}};
         self.reset(pos);
 
-        if let Some(x) = self.array_literal() {
-            return Some(ExpressionNode::ArrayLiteralNode(Box::new(x)));
+        if let Some(array) = self.array_literal() {
+            return Some(Box::new(array));
         };
 
         if let Some(lookup) = self.lookup() {
-            return Some(ExpressionNode::LookupNode(Box::new(lookup)));
+            return Some(Box::new(lookup));
         };
         
         if let Some(token) = self.expect_type("NUMBER") {
             let value = Fraction::from_str(&token.string_[..]).unwrap();
             let value = FractionNode{value};
-            return Some(ExpressionNode::FractionNode(Box::new(value)));
+            return Some(Box::new(value));
         };
 
         if self.expect_literal("-") {
         if let Some(expr) = self.atom() {
-            return Some(ExpressionNode::UniopNode(Box::new(
+            return Some(Box::new(
                 UniopNode{expr, op: Instruction::UniopNeg}
-            )));
+            ));
         }};
         self.reset(pos);
 
         if self.expect_literal("!") {
         if let Some(expr) = self.atom() {
-            return Some(ExpressionNode::UniopNode(Box::new(
+            return Some(Box::new(
                 UniopNode{expr, op: Instruction::UniopNot}
-            )));
+            ));
         }};
         self.reset(pos);
 

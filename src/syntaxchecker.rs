@@ -8,6 +8,7 @@ use crate::interpreter;
 use crate::parsetree as PT;
 use crate::syntaxtree as ST;
 
+use crate::parsetree::Expression as PTExpression;
 
 #[derive(Debug)]
 pub struct Variable {
@@ -310,180 +311,154 @@ impl<'a> SyntaxContext<'a> {
 }
 
 
-impl ST::FractionNode {
-    fn from(node: PT::FractionNode, ctx: &mut SyntaxContext) -> ST::FractionNode {
+// ---------------------------- Expression Nodes ---------------------------- //
+
+impl PT::Expression for PT::FractionNode {
+    fn checkSyntax(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Expression> {
         let const_idx = ctx.add_const(
-            interpreter::Variable::Frac(node.value)
+            interpreter::Variable::Frac(self.value)
         );
-        ST::FractionNode{const_idx, used_vars: HashSet::new()}
+        Box::new(ST::FractionNode{const_idx, used_vars: HashSet::new()})
     }
 }
 
-impl ST::BinopNode {
-    fn from(node: PT::BinopNode, ctx: &mut SyntaxContext) -> ST::BinopNode {
-        let lhs = ST::ExpressionNode::from(node.lhs, ctx);
-        let rhs = ST::ExpressionNode::from(node.rhs, ctx);
+impl PT::Expression for PT::BinopNode {
+    fn checkSyntax(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Expression> {
+        let lhs = self.lhs.checkSyntax(ctx);
+        let rhs = self.rhs.checkSyntax(ctx);
         let is_mono = lhs.is_mono() || rhs.is_mono();
         let used_vars = lhs.used_vars().iter()
                         .chain(rhs.used_vars().iter())
                         .cloned().collect();
-        ST::BinopNode{lhs, rhs, is_mono, used_vars, op: node.op}
+        Box::new(ST::BinopNode{lhs, rhs, is_mono, used_vars, op: self.op})
     }
 }
 
-impl ST::UniopNode {
-    fn from(node: PT::UniopNode, ctx: &mut SyntaxContext) -> ST::UniopNode {
-        let expr = ST::ExpressionNode::from(node.expr, ctx);
+impl PT::Expression for PT::UniopNode {
+    fn checkSyntax(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Expression> {
+        let expr = self.expr.checkSyntax(ctx);
         let is_mono = expr.is_mono();
         let used_vars = expr.used_vars().clone();
-        ST::UniopNode{expr, is_mono, used_vars, op: node.op}
+        Box::new(ST::UniopNode{expr, is_mono, used_vars, op: self.op})
     }
 }
 
-impl ST::ArrayLiteralNode {
-    fn from(node: PT::ArrayLiteralNode, ctx: &mut SyntaxContext) -> ST::ArrayLiteralNode {
-        let items = node.items.into_iter()
-                              .map(|i| ST::ExpressionNode::from(i, ctx))
+impl PT::Expression for PT::ArrayLiteralNode {
+    fn checkSyntax(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Expression> {
+        let items = self.items.into_iter()
+                              .map(|i| i.checkSyntax(ctx))
                               .collect::<Vec<ST::ExpressionNode>>();
         let is_mono = items.iter().any(|x| x.is_mono());
         let used_vars = items.iter().map(|x| x.used_vars())
                                     .flat_map(|it| it.clone())
                                     .collect();
-        ST::ArrayLiteralNode{items, used_vars, is_mono}
+        Box::new(ST::ArrayLiteralNode{items, used_vars, is_mono})
     }
 }
 
-impl ST::LookupNode {
-    fn from(node: PT::LookupNode, ctx: &mut SyntaxContext) -> ST::LookupNode {
-        let register = ctx.lookup_variable(&node.name).register;
-        let indices = node.indices.into_iter()
-                                  .map(|i| ST::ExpressionNode::from(i, ctx))
+impl PT::Expression for PT::LookupNode {
+    fn checkSyntax(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Expression> {
+        Box::new(self.checkSyntax_unboxed(ctx))
+    }
+}
+impl PT::LookupNode {
+    fn checkSyntax_unboxed(self, ctx: &mut SyntaxContext) -> ST::LookupNode {
+    let register = ctx.lookup_variable(&self.name).register;
+        let indices = self.indices.into_iter()
+                                  .map(|i| i.checkSyntax(ctx))
                                   .collect::<Vec<ST::ExpressionNode>>();
-        let is_mono = node.name.starts_with(".")
+        let is_mono = self.name.starts_with(".")
                     || indices.iter().any(|x| x.is_mono());
         let mut used_vars = indices.iter().map(|x| x.used_vars())
                                           .flat_map(|it| it.clone())
                                           .collect::<HashSet<_>>();
-        used_vars.insert(ctx.get_var_id(&node.name));
+        used_vars.insert(ctx.get_var_id(&self.name));
         ST::LookupNode{register, indices, used_vars, is_mono}
     }
 }
 
 
+// ---------------------------- Statement Nodes ---------------------------- //
 
-impl ST::ExpressionNode {
-    fn from(node: PT::ExpressionNode, ctx: &mut SyntaxContext) -> ST::ExpressionNode {
-        macro_rules! passthrough {
-            ($( $x:ident ),*) => {
-                match node {
-                    $(
-                        PT::ExpressionNode::$x(valbox) =>
-                        ST::ExpressionNode::$x(Box::new(ST::$x::from(*valbox, ctx)))
-                    ,)*
-        }   }   }
-        passthrough! {FractionNode, BinopNode, ArrayLiteralNode, LookupNode, UniopNode}
-    }
 
-    fn is_mono(&self) -> bool {
-        match self {
-            ST::ExpressionNode::FractionNode(_) => false,
-            ST::ExpressionNode::ArrayLiteralNode(x) => x.is_mono,
-            ST::ExpressionNode::BinopNode(x) => x.is_mono,
-            ST::ExpressionNode::LookupNode(x) => x.is_mono,
-            ST::ExpressionNode::UniopNode(x) => x.is_mono
-        }
-    }
-
-    fn used_vars(&self) -> &HashSet<usize> {
-        match self {
-            ST::ExpressionNode::FractionNode(x) => &x.used_vars,
-            ST::ExpressionNode::ArrayLiteralNode(x) => &x.used_vars,
-            ST::ExpressionNode::BinopNode(x) => &x.used_vars,
-            ST::ExpressionNode::LookupNode(x) => &x.used_vars,
-            ST::ExpressionNode::UniopNode(x) => &x.used_vars
-        }
+impl PT::Statement for PT::LetUnletNode {
+    fn checkSyntax(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
+        Box::new(ST::LetUnletNode{
+            is_unlet: self.is_unlet,
+            register: if self.is_unlet {ctx.remove_variable(&self.name)}
+                      else             {ctx.create_variable(&self.name)},
+            rhs: self.rhs.checkSyntax(ctx)
+        })
     }
 }
 
-
-impl ST::LetUnletNode {
-    fn from(node: PT::LetUnletNode, ctx: &mut SyntaxContext) -> ST::LetUnletNode {
-        ST::LetUnletNode{
-            is_unlet: node.is_unlet,
-            register: if node.is_unlet {ctx.remove_variable(&node.name)}
-                      else             {ctx.create_variable(&node.name)},
-            rhs: ST::ExpressionNode::from(node.rhs, ctx)
-        }
+impl PT::Statement for PT::RefUnrefNode {
+    fn checkSyntax(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
+        Box::new(ST::RefUnrefNode{
+            is_unref: self.is_unref,
+            register: if self.is_unref {ctx.remove_ref(&self.name, &self.rhs)}
+                      else             {ctx.create_ref(&self.name, &self.rhs)},
+            rhs: self.rhs.checkSyntax_unboxed(ctx)
+        })
     }
 }
 
-impl ST::RefUnrefNode {
-    fn from(node: PT::RefUnrefNode, ctx: &mut SyntaxContext) -> ST::RefUnrefNode {
-        ST::RefUnrefNode{
-            is_unref: node.is_unref,
-            register: if node.is_unref {ctx.remove_ref(&node.name, &node.rhs)}
-                      else             {ctx.create_ref(&node.name, &node.rhs)},
-            rhs: ST::LookupNode::from(node.rhs, ctx)
-        }
+impl PT::Statement for PT::ModopNode {
+    fn checkSyntax(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
+        Box::new(ST::ModopNode{
+            lookup: self.lookup.checkSyntax_unboxed(ctx),
+            op: self.op,
+            rhs: self.rhs.checkSyntax(ctx)
+        })
     }
 }
 
-impl ST::ModopNode {
-    fn from(node: PT::ModopNode, ctx: &mut SyntaxContext) -> ST::ModopNode {
-        ST::ModopNode{
-            lookup: ST::LookupNode::from(node.lookup, ctx),
-            op: node.op,
-            rhs: ST::ExpressionNode::from(node.rhs, ctx)
-        }
-    }
-}
-
-impl ST::PushPullNode {
-    fn from(node: PT::PushPullNode, ctx: &mut SyntaxContext) -> ST::PushPullNode {
+impl PT::Statement for PT::PushPullNode {
+    fn checkSyntax(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
 
         // The lookup may have no other interior references
         // (it may be an interior reference itself)
         assert!(
-            ctx.check_ref_is_resizable(&node.lookup.name),
-            "Resizing {} when other references to its interior exist", node.lookup.name
+            ctx.check_ref_is_resizable(&self.lookup.name),
+            "Resizing {} when other references to its interior exist", self.lookup.name
         );
 
-        let register = if node.is_push {ctx.remove_variable(&node.name)}
-                       else            {ctx.create_variable(&node.name)};
-        let lookup = ST::LookupNode::from(node.lookup, ctx);
+        let register = if self.is_push {ctx.remove_variable(&self.name)}
+                       else            {ctx.create_variable(&self.name)};
+        let lookup = self.lookup.checkSyntax_unboxed(ctx);
 
-        ST::PushPullNode{register, lookup, is_push: node.is_push}
+        Box::new(ST::PushPullNode{register, lookup, is_push: self.is_push})
     }
 }
 
-impl ST::IfNode {
-    fn from(node: PT::IfNode, ctx: &mut SyntaxContext) -> ST::IfNode {
-        let fwd_expr = ST::ExpressionNode::from(node.fwd_expr, ctx);
-        let bkwd_expr = ST::ExpressionNode::from(node.bkwd_expr, ctx);
-        let if_stmts = node.if_stmts.into_iter().map(|s| ST::StatementNode::from(s, ctx)).collect();
-        let else_stmts = node.else_stmts.into_iter().map(|s| ST::StatementNode::from(s, ctx)).collect();
-        ST::IfNode{fwd_expr, if_stmts, else_stmts, bkwd_expr}
+impl PT::Statement for PT::IfNode {
+    fn checkSyntax(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
+        let fwd_expr = self.fwd_expr.checkSyntax(ctx);
+        let bkwd_expr = self.bkwd_expr.checkSyntax(ctx);
+        let if_stmts = self.if_stmts.into_iter().map(|s| s.checkSyntax(ctx)).collect();
+        let else_stmts = self.else_stmts.into_iter().map(|s| s.checkSyntax(ctx)).collect();
+        Box::new(ST::IfNode{fwd_expr, if_stmts, else_stmts, bkwd_expr})
     }
 }
 
-impl ST::WhileNode {
-    fn from(node: PT::WhileNode, ctx: &mut SyntaxContext) -> ST::WhileNode {
-        let fwd_expr = ST::ExpressionNode::from(node.fwd_expr, ctx);
-        let bkwd_expr = node.bkwd_expr.map(|x| ST::ExpressionNode::from(x, ctx));
-        let stmts = node.stmts.into_iter().map(|s| ST::StatementNode::from(s, ctx)).collect();
-        ST::WhileNode{fwd_expr, stmts, bkwd_expr}
+impl PT::Statement for PT::WhileNode {
+    fn checkSyntax(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
+        let fwd_expr = self.fwd_expr.checkSyntax(ctx);
+        let bkwd_expr = self.bkwd_expr.map(|x| x.checkSyntax(ctx));
+        let stmts = self.stmts.into_iter().map(|s| s.checkSyntax(ctx)).collect();
+        Box::new(ST::WhileNode{fwd_expr, stmts, bkwd_expr})
     }
 }
 
-impl ST::CatchNode {
-    fn from(node: PT::CatchNode, ctx: &mut SyntaxContext) -> ST::CatchNode {
-        ST::CatchNode{expr: ST::ExpressionNode::from(node.expr, ctx)}
+impl PT::Statement for PT::CatchNode {
+    fn checkSyntax(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
+        Box::new(ST::CatchNode{expr: self.expr.checkSyntax(ctx)})
     }
 }
 
 
-impl ST::CallNode {
-    fn from(node: PT::CallNode, ctx: &mut SyntaxContext) -> ST::CallNode {
+impl PT::Statement for PT::CallNode {
+    fn checkSyntax(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
 
         /* 
         TODO:
@@ -496,12 +471,12 @@ impl ST::CallNode {
             - Check linked params share a var
         */
 
-        let proto = ctx.lookup_function_prototype(&node.name);
+        let proto = ctx.lookup_function_prototype(&self.name);
         let func_idx = proto.id;
         let mut used_links: HashMap<Rc<Variable>, Option<String>> = HashMap::new();
         let mut used_vars: HashMap<String, Rc<Variable>> = HashMap::new();
 
-        for (param, proto_link) in node.borrow_args.iter().zip(proto.borrow_params.iter()) {
+        for (param, proto_link) in self.borrow_args.iter().zip(proto.borrow_params.iter()) {
 
             let var = &ctx.lookup_variable(&param.name).var;
             let link = proto_link.clone().map(|pl| pl.link).flatten();
@@ -536,39 +511,39 @@ impl ST::CallNode {
             }
         }
 
-        let mut stolen_args = Vec::with_capacity(node.stolen_args.len());
-        for arg in node.stolen_args.into_iter() {
+        let mut stolen_args = Vec::with_capacity(self.stolen_args.len());
+        for arg in self.stolen_args.into_iter() {
             stolen_args.push(ctx.lookup_variable(&arg).register);
             ctx.local_variables.remove(&arg);
         }
-        let borrow_args = node.borrow_args.into_iter()
-                                          .map(|a| ST::LookupNode::from(a, ctx))
+        let borrow_args = self.borrow_args.into_iter()
+                                          .map(|a| a.checkSyntax_unboxed(ctx))
                                           .collect();
-        let mut return_args = Vec::with_capacity(node.return_args.len());
-        for arg in node.return_args.into_iter() {
+        let mut return_args = Vec::with_capacity(self.return_args.len());
+        for arg in self.return_args.into_iter() {
             return_args.push(ctx.create_variable(&arg));
             // TODO: Using create variable is WRONG
         }
-        ST::CallNode{
-            is_uncall: node.is_uncall,
+        Box::new(ST::CallNode{
+            is_uncall: self.is_uncall,
             func_idx, borrow_args, stolen_args, return_args
-        }
+        })
     }
 }
 
-impl ST::FunctionNode {
-    fn from(
-        node: PT::FunctionNode,
+impl PT::FunctionNode {
+    fn checkSyntax(
+        self,
         func_lookup: &HashMap<String, ST::FunctionPrototype>
     ) -> ST::FunctionNode {
 
         let mut ctx = SyntaxContext::new(func_lookup);
         let (link_set, borrow_registers, steal_registers) = ctx.init_func(
-            node.owned_links, node.borrow_params, node.steal_params);
-        let stmts = node.stmts.into_iter()
-                              .map(|s| ST::StatementNode::from(s, &mut ctx))
+            self.owned_links, self.borrow_params, self.steal_params);
+        let stmts = self.stmts.into_iter()
+                              .map(|s| s.checkSyntax(&mut ctx))
                               .collect();
-        let return_registers = ctx.end_func(link_set, node.return_params);
+        let return_registers = ctx.end_func(link_set, self.return_params);
 
         ST::FunctionNode{
             stmts, borrow_registers, steal_registers, return_registers,
@@ -666,23 +641,6 @@ impl ST::FunctionPrototype {
 }
 
 
-impl ST::StatementNode {
-    fn from(node: PT::StatementNode, ctx: &mut SyntaxContext) -> ST::StatementNode {
-        macro_rules! passthrough {
-            ($( $x:ident ),*) => {
-                match node {
-                    $(
-                        PT::StatementNode::$x(valbox) =>
-                        ST::StatementNode::$x(Box::new(ST::$x::from(*valbox, ctx)))
-                    ,)*
-        }   }   }
-        passthrough! {
-            LetUnletNode, RefUnrefNode, ModopNode, IfNode, CatchNode,
-            CallNode, PushPullNode, WhileNode
-        }
-    }
-}
-
 pub fn check_syntax(module: PT::Module) -> ST::Module{
     let mut func_prototypes = HashMap::new();
 
@@ -702,7 +660,7 @@ pub fn check_syntax(module: PT::Module) -> ST::Module{
 
     for (i, f) in module.functions.into_iter().enumerate() {
         if f.name == "main" {main_idx = Some(i)}
-        functions.push(ST::FunctionNode::from(f, &func_prototypes));
+        functions.push(f.checkSyntax(&func_prototypes));
     }
 
     ST::Module{functions, main_idx}

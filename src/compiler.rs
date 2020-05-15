@@ -1,6 +1,7 @@
-
+use std::collections::HashSet;
 
 use crate::syntaxtree as ST;
+use crate::syntaxtree::Expression as STExpression;
 use crate::interpreter;
 use interpreter::Instruction;
 
@@ -98,27 +99,20 @@ impl Code {
 }
 
 
-impl ST::ExpressionNode {
-    pub fn compile(&self) -> Vec<Instruction> {
-        match &self {
-            ST::ExpressionNode::FractionNode(valbox) => valbox.compile(),
-            ST::ExpressionNode::LookupNode(valbox) => valbox.compile(),
-            ST::ExpressionNode::BinopNode(valbox) => valbox.compile(),
-            ST::ExpressionNode::UniopNode(valbox) => valbox.compile(),
-            ST::ExpressionNode::ArrayLiteralNode(valbox) => valbox.compile()
-        }
-    }
-}
+impl ST::Expression for ST::FractionNode {
+    fn is_mono(&self) -> bool {false}
+    fn used_vars(&self) -> &HashSet<usize> {&self.used_vars}
 
-impl ST::FractionNode {
-    pub fn compile(&self) -> Vec<Instruction> {
+    fn compile(&self) -> Vec<Instruction> {
         vec![Instruction::LoadConst{idx: self.const_idx}]
     }
 }
 
+impl ST::Expression for ST::LookupNode {
+    fn is_mono(&self) -> bool {self.is_mono}
+    fn used_vars(&self) -> &HashSet<usize> {&self.used_vars}
 
-impl ST::LookupNode {
-    pub fn compile(&self) -> Vec<Instruction> {
+    fn compile(&self) -> Vec<Instruction> {
         let mut instructions = Vec::with_capacity(self.indices.len()+1);        
         for index in self.indices.iter().rev() {
             instructions.extend(index.compile());
@@ -131,9 +125,11 @@ impl ST::LookupNode {
     }
 }
 
+impl ST::Expression for ST::BinopNode {
+    fn is_mono(&self) -> bool {self.is_mono}
+    fn used_vars(&self) -> &HashSet<usize> {&self.used_vars}
 
-impl ST::BinopNode {
-    pub fn compile(&self) -> Vec<Instruction> {
+    fn compile(&self) -> Vec<Instruction> {
         let mut ret = Vec::new();
         ret.extend(self.lhs.compile());
         ret.extend(self.rhs.compile());
@@ -142,9 +138,11 @@ impl ST::BinopNode {
     }
 }
 
+impl ST::Expression for ST::UniopNode {
+    fn is_mono(&self) -> bool {self.is_mono}
+    fn used_vars(&self) -> &HashSet<usize> {&self.used_vars} // TODO: can I provide a type-generic implementation?
 
-impl ST::UniopNode {
-    pub fn compile(&self) -> Vec<Instruction> {
+    fn compile(&self) -> Vec<Instruction> {
         let mut ret = Vec::new();
         ret.extend(self.expr.compile());
         ret.push(self.op.clone());
@@ -152,9 +150,11 @@ impl ST::UniopNode {
     }
 }
 
-
-impl ST::ArrayLiteralNode {
-    pub fn compile(&self) -> Vec<Instruction> {
+impl ST::Expression for ST::ArrayLiteralNode {
+    fn is_mono(&self) -> bool {self.is_mono}
+    fn used_vars(&self) -> &HashSet<usize> {&self.used_vars}
+    
+    fn compile(&self) -> Vec<Instruction> {
         let mut ret = Vec::with_capacity(self.items.len() + 1);
         for item in self.items.iter().rev() {
             ret.extend(item.compile());
@@ -165,24 +165,11 @@ impl ST::ArrayLiteralNode {
 }
 
 
-impl ST::StatementNode {
-    pub fn compile(&self) -> Code {
-        match self {
-            ST::StatementNode::LetUnletNode(valbox) => valbox.compile(),
-            ST::StatementNode::RefUnrefNode(valbox) => valbox.compile(),
-            ST::StatementNode::IfNode(valbox) => valbox.compile(),
-            ST::StatementNode::WhileNode(valbox) => valbox.compile(),
-            ST::StatementNode::ModopNode(valbox) => valbox.compile(),
-            ST::StatementNode::PushPullNode(valbox) => valbox.compile(),
-            ST::StatementNode::CatchNode(valbox) => valbox.compile(),
-            ST::StatementNode::CallNode(valbox) => valbox.compile()
-        }
-    }
-}
+// ------------------------------ Statement Nodes ------------------------------ //
 
 
-impl ST::LetUnletNode {
-    pub fn compile(&self) -> Code {
+impl ST::Statement for ST::LetUnletNode {
+    fn compile(&self) -> Code {
         let mut code = Code::new();
         if self.is_unlet {
             code.push_fwd(Instruction::FreeRegister{register: self.register});
@@ -202,8 +189,8 @@ impl ST::LetUnletNode {
 }
 
 
-impl ST::RefUnrefNode {
-    pub fn compile(&self) -> Code {
+impl ST::Statement for ST::RefUnrefNode {
+    fn compile(&self) -> Code {
         let mut create_ref = self.rhs.compile();
         create_ref.push(Instruction::StoreRegister{register: self.register});
         let remove_ref = vec![Instruction::FreeRegister{register: self.register}];
@@ -221,8 +208,8 @@ impl ST::RefUnrefNode {
 }
 
 
-impl ST::ModopNode {
-    pub fn compile(&self) -> Code {
+impl ST::Statement for ST::ModopNode {
+    fn compile(&self) -> Code {
         let lookup = self.lookup.compile();
         let rhs = self.rhs.compile();
         let bkwd_op = match self.op {
@@ -252,8 +239,8 @@ impl ST::ModopNode {
     }
 }
 
-impl ST::PushPullNode {
-    pub fn compile(&self) -> Code {
+impl ST::Statement for ST::PushPullNode {
+    fn compile(&self) -> Code {
         let mut code = Code::new();
         let lookup = self.lookup.compile();
         let register = self.register;
@@ -278,8 +265,8 @@ impl ST::PushPullNode {
 }
 
 
-impl ST::IfNode {
-    pub fn compile(&self) -> Code {
+impl ST::Statement for ST::IfNode {
+    fn compile(&self) -> Code {
         let fwd_expr = self.fwd_expr.compile();
         let bkwd_expr = self.bkwd_expr.compile();
         let mut if_block = Code::new();
@@ -315,10 +302,10 @@ impl ST::IfNode {
 }
 
 
-impl ST::WhileNode {
-    pub fn compile(&self) -> Code {
+impl ST::Statement for ST::WhileNode {
+    fn compile(&self) -> Code {
         let fwd_expr = self.fwd_expr.compile();
-        let bkwd_expr = self.bkwd_expr.clone().unwrap().compile();
+        let bkwd_expr = self.bkwd_expr.as_ref().unwrap().compile();
         let mut stmts = Code::new();
         for stmt in self.stmts.iter() {
             stmts.extend(stmt.compile());
@@ -356,8 +343,8 @@ impl ST::WhileNode {
 }
 
 
-impl ST::CatchNode {
-    pub fn compile(&self) -> Code {
+impl ST::Statement for ST::CatchNode {
+    fn compile(&self) -> Code {
         let mut code = Code::new();
         code.append_fwd(self.expr.compile());
         code.push_fwd(Instruction::JumpIfFalse{delta: 1});
@@ -366,8 +353,8 @@ impl ST::CatchNode {
     }
 }
 
-impl ST::CallNode {
-    pub fn compile(&self) -> Code {
+impl ST::Statement for ST::CallNode {
+    fn compile(&self) -> Code {
         let mut code = Code::new();
 
         for &register in self.stolen_args.iter().rev() {
