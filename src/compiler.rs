@@ -80,6 +80,8 @@ impl Code {
     pub fn finalise(code: Code) -> interpreter::Code {
         let Code{mut fwd, mut bkwd, f2b_links, b2f_links} = code;
         bkwd.reverse();
+
+        // Compute instruction pointers for reversals //
         for (f, b) in f2b_links.into_iter() {
             let b = bkwd.len() - b;
             match fwd[f] {
@@ -92,6 +94,36 @@ impl Code {
             match bkwd[b] {
                 Instruction::Reverse{idx: _} => bkwd[b] = Instruction::Reverse{idx: f},
                 _ => panic!()
+            }
+        }
+
+        // Replace relative jumps with absolute jumps //
+        for i in 0..fwd.len() {
+            match fwd[i] {
+                Instruction::RelativeJump{delta} => {
+                    fwd[i] = Instruction::Jump{ip: (i as isize + delta) as usize}
+                },
+                Instruction::RelativeJumpIfTrue{delta} => {
+                    fwd[i] = Instruction::JumpIfTrue{ip: (i as isize + delta) as usize}
+                },
+                Instruction::RelativeJumpIfFalse{delta} => {
+                    fwd[i] = Instruction::JumpIfFalse{ip: (i as isize + delta) as usize}
+                },
+                _ => {}
+            }
+        }
+        for i in 0..bkwd.len() {
+            match bkwd[i] {
+                Instruction::RelativeJump{delta} => {
+                    bkwd[i] = Instruction::Jump{ip: (i as isize + delta) as usize}
+                },
+                Instruction::RelativeJumpIfTrue{delta} => {
+                    bkwd[i] = Instruction::JumpIfTrue{ip: (i as isize + delta) as usize}
+                },
+                Instruction::RelativeJumpIfFalse{delta} => {
+                    bkwd[i] = Instruction::JumpIfFalse{ip: (i as isize + delta) as usize}
+                },
+                _ => {}
             }
         }
         interpreter::Code{fwd, bkwd}
@@ -282,19 +314,20 @@ impl ST::Statement for ST::IfNode {
         
         let mut code = Code::with_capacity(
             if_block.fwd_len() + else_block.fwd_len() + fwd_expr.len() + 2, 
-            if_block.bkwd_len() + else_block.bkwd_len() + bkwd_expr.len() + 2);
+            if_block.bkwd_len() + else_block.bkwd_len() + bkwd_expr.len() + 2
+        );
         
         code.append_fwd(fwd_expr);
-        code.push_fwd(Instruction::JumpIfFalse{
-            delta: (if_block.fwd_len() + 1) as isize
+        code.push_fwd(Instruction::RelativeJumpIfFalse{
+            delta: (if_block.fwd_len() + 2) as isize
         });
         code.extend(if_block);
-        code.push_fwd(Instruction::Jump{
-            delta: else_block.fwd_len() as isize
+        code.push_fwd(Instruction::RelativeJump{
+            delta: (else_block.fwd_len() + 1) as isize
         });
-        code.push_bkwd(Instruction::Jump{delta: if_bkwd_len});
+        code.push_bkwd(Instruction::RelativeJump{delta: if_bkwd_len + 1});
         code.extend(else_block);
-        code.push_bkwd(Instruction::JumpIfTrue{delta: else_bkwd_len + 1});
+        code.push_bkwd(Instruction::RelativeJumpIfTrue{delta: else_bkwd_len + 2});
         code.append_bkwd(bkwd_expr);
 
         code
@@ -305,7 +338,7 @@ impl ST::Statement for ST::IfNode {
 impl ST::Statement for ST::WhileNode {
     fn compile(&self) -> Code {
         let fwd_expr = self.fwd_expr.compile();
-        let bkwd_expr = self.bkwd_expr.as_ref().unwrap().compile();
+        let bkwd_expr = self.bkwd_expr.as_ref(). unwrap().compile();
         let mut stmts = Code::new();
         for stmt in self.stmts.iter() {
             stmts.extend(stmt.compile());
@@ -320,20 +353,20 @@ impl ST::Statement for ST::WhileNode {
         
         code.append_fwd(fwd_expr);
         
-        code.push_fwd(Instruction::JumpIfFalse{
-            delta: stmts_fwd_len + 1
+        code.push_fwd(Instruction::RelativeJumpIfFalse{
+            delta: stmts_fwd_len + 2
         });
-        code.push_bkwd(Instruction::Jump{
-            delta: -stmts_bkwd_len - bkwd_expr_len - 2
+        code.push_bkwd(Instruction::RelativeJump{
+            delta: -stmts_bkwd_len - bkwd_expr_len - 1
         });
 
         code.extend(stmts);
 
-        code.push_fwd(Instruction::Jump{
-            delta: -stmts_fwd_len - fwd_expr_len - 2
+        code.push_fwd(Instruction::RelativeJump{
+            delta: -stmts_fwd_len - fwd_expr_len - 1
         });
-        code.push_bkwd(Instruction::JumpIfFalse{
-            delta: stmts_bkwd_len + 1
+        code.push_bkwd(Instruction::RelativeJumpIfFalse{
+            delta: stmts_bkwd_len + 2
         });
 
         code.append_bkwd(bkwd_expr);
@@ -347,7 +380,7 @@ impl ST::Statement for ST::CatchNode {
     fn compile(&self) -> Code {
         let mut code = Code::new();
         code.append_fwd(self.expr.compile());
-        code.push_fwd(Instruction::JumpIfFalse{delta: 1});
+        code.push_fwd(Instruction::RelativeJumpIfFalse{delta: 2});
         code.link_fwd2bkwd();
         code
     }

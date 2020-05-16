@@ -93,9 +93,12 @@ pub enum Instruction {
     BinopIDiv, BinopMod, BinopPow,
     UniopNeg, UniopNot,
     Reverse{idx: usize},
-    Jump{delta: isize},
-    JumpIfTrue{delta: isize},    
-    JumpIfFalse{delta: isize},
+    Jump{ip: usize},
+    JumpIfTrue{ip: usize},
+    JumpIfFalse{ip: usize},
+    RelativeJump{delta: isize},
+    RelativeJumpIfTrue{delta: isize},
+    RelativeJumpIfFalse{delta: isize},
     CreateArray{size: usize},
     Call{idx: usize},
     Uncall{idx: usize},
@@ -244,7 +247,7 @@ impl<'a> Interpreter<'a> {
                     }
                 };
 
-                println!("IP: {}, {:?}", self.ip, instruction);
+                println!("{} IP: {}, {:?}", if self.forwards {"FWD"} else {"BKWD"}, self.ip, instruction);
 
                 match instruction {
                     Instruction::LoadConst{idx} => self.load_const(*idx),
@@ -274,20 +277,21 @@ impl<'a> Interpreter<'a> {
                     Instruction::UniopNeg => self.uniop_neg(),
                     Instruction::UniopNot => self.uniop_not(),
                     Instruction::CreateArray{size} => self.create_array(*size),
-                    Instruction::Jump{delta} => self.jump(*delta),
-                    Instruction::JumpIfTrue{delta} => self.jump_if_true(*delta),
-                    Instruction::JumpIfFalse{delta} => self.jump_if_false(*delta),
                     Instruction::Pull{register} => self.pull(*register),
                     Instruction::Push{register} => self.push(*register),
+                    
+                    Instruction::Jump{ip} => {self.jump(*ip); continue 'refresh_instructions},
+                    Instruction::JumpIfTrue{ip} => {self.jump_if_true(*ip); continue 'refresh_instructions},
+                    Instruction::JumpIfFalse{ip} => {self.jump_if_false(*ip); continue 'refresh_instructions},
                     Instruction::Call{idx} => {self.call(*idx, true); continue 'refresh_instructions},
                     Instruction::Uncall{idx} => {self.call(*idx, false); continue 'refresh_instructions},
-                    Instruction::Reverse{idx} => {
-                        self.forwards = !self.forwards;
-                        self.ip = *idx;
-                        continue 'refresh_instructions;
-                    }
+                    Instruction::Reverse{idx} => {self.reverse(*idx); continue 'refresh_instructions;}
                     Instruction::Quit => break 'refresh_instructions,
                     Instruction::DebugPrint => self.debug_print(),
+
+                    Instruction::RelativeJump{delta: _} => unimplemented!("RelativeJump"),
+                    Instruction::RelativeJumpIfTrue{delta: _} => unimplemented!("RelativeJumpIfTrue"),
+                    Instruction::RelativeJumpIfFalse{delta: _} => unimplemented!("RelativeJumpIfFalse")
                 }
                 
                 self.ip += 1;
@@ -319,22 +323,32 @@ impl<'a> Interpreter<'a> {
     }
 
     #[inline]
-    fn jump(&mut self, delta: isize) {
-        self.ip = ((self.ip as isize) + delta) as usize;
+    fn jump(&mut self, ip: usize) {
+        self.ip = ip;
     }
 
     #[inline]
-    fn jump_if_true(&mut self, delta: isize) {
+    fn jump_if_true(&mut self, ip: usize) {
         if self.pop_var().borrow().to_bool() {
-            self.jump(delta);
+            self.jump(ip);
+        } else {
+            self.ip += 1;
         }
     }
 
     #[inline]
-    fn jump_if_false(&mut self, delta: isize) {
+    fn jump_if_false(&mut self, ip: usize) {
         if !self.pop_var().borrow().to_bool() {
-            self.jump(delta);
+            self.jump(ip);
+        } else {
+            self.ip += 1;
         }
+    }
+
+    #[inline]
+    fn reverse(&mut self, ip: usize) {
+        self.forwards = !self.forwards;
+        self.ip = ip;
     }
 
     #[inline]

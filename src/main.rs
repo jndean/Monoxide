@@ -23,7 +23,7 @@ fn main() {
     let module = syntaxchecker::check_syntax(parsed);
     // println!("Module: {:#?}", module);
     let program = module.compile();
-    // println!("Compiled: {:#?}", program);
+    println!("Compiled: {:#?}", program);
     interpreter::Interpreter::run(&program);
     
 }
