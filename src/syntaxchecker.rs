@@ -367,13 +367,13 @@ impl PT::LookupNode {
         let indices = self.indices.into_iter()
                                   .map(|i| i.to_syntax_node(ctx))
                                   .collect::<Vec<ST::ExpressionNode>>();
-        let is_mono = self.name.starts_with(".")
-                    || indices.iter().any(|x| x.is_mono());
+        let var_is_mono = self.name.starts_with(".");
+        let is_mono = var_is_mono || indices.iter().any(|x| x.is_mono());
         let mut used_vars = indices.iter().map(|x| x.used_vars())
                                           .flat_map(|it| it.clone())
                                           .collect::<HashSet<_>>();
         used_vars.insert(ctx.get_var_id(&self.name));
-        ST::LookupNode{register, indices, used_vars, is_mono}
+        ST::LookupNode{register, indices, used_vars, is_mono, var_is_mono}
     }
 }
 
@@ -383,33 +383,48 @@ impl PT::LookupNode {
 
 impl PT::Statement for PT::LetUnletNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
-        Box::new(ST::LetUnletNode{
-            is_unlet: self.is_unlet,
-            register: if self.is_unlet {ctx.remove_variable(&self.name)}
-                      else             {ctx.create_variable(&self.name)},
-            rhs: self.rhs.to_syntax_node(ctx)
-        })
+        let is_unlet = self.is_unlet;
+        let register = if self.is_unlet {ctx.remove_variable(&self.name)}
+                       else             {ctx.create_variable(&self.name)};
+        let rhs = self.rhs.to_syntax_node(ctx);
+        let is_mono = self.name.starts_with(".");
+
+        assert!(is_mono || !rhs.is_mono(),
+            "Initialising variable \"{}\" using mono information", self.name
+        );
+
+        Box::new(ST::LetUnletNode{is_unlet, register, rhs, is_mono})
     }
 }
 
 impl PT::Statement for PT::RefUnrefNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
-        Box::new(ST::RefUnrefNode{
-            is_unref: self.is_unref,
-            register: if self.is_unref {ctx.remove_ref(&self.name, &self.rhs)}
-                      else             {ctx.create_ref(&self.name, &self.rhs)},
-            rhs: self.rhs.to_syntax_node_unboxed(ctx)
-        })
+        let is_unref = self.is_unref;
+        let register = if self.is_unref {ctx.remove_ref(&self.name, &self.rhs)}
+                       else             {ctx.create_ref(&self.name, &self.rhs)};
+        let rhs = self.rhs.to_syntax_node_unboxed(ctx);
+        let is_mono = self.name.starts_with(".");
+
+        assert!(is_mono == rhs.is_mono,
+                "Reference \"{}\" cannot have different mono-ness to RHS", self.name);
+        assert!(is_mono == rhs.var_is_mono,
+                "Reference \"{}\" has different mono-ness to RHS variable", self.name);
+
+        Box::new(ST::RefUnrefNode{is_unref, register, rhs, is_mono})
     }
 }
 
 impl PT::Statement for PT::ModopNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
-        Box::new(ST::ModopNode{
-            lookup: self.lookup.to_syntax_node_unboxed(ctx),
-            op: self.op,
-            rhs: self.rhs.to_syntax_node(ctx)
-        })
+        let varname = self.lookup.name.clone();
+        let lookup = self.lookup.to_syntax_node_unboxed(ctx);
+        let rhs = self.rhs.to_syntax_node(ctx);
+        let is_mono = lookup.var_is_mono;
+        if !is_mono { assert!(
+            !lookup.is_mono && !rhs.is_mono(),
+            "Modifying variable \"{}\" using mono information", varname
+        );}
+        Box::new(ST::ModopNode{lookup, rhs, is_mono, op: self.op})
     }
 }
 

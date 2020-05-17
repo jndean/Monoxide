@@ -32,6 +32,7 @@ pub struct LookupNode {
     pub register: usize,
     pub indices: Vec<ExpressionNode>,
     pub is_mono: bool,
+    pub var_is_mono: bool,
     pub used_vars: HashSet<usize>
 }
 
@@ -64,21 +65,24 @@ pub type StatementNode = Box<dyn Statement>;
 pub struct LetUnletNode {
     pub is_unlet: bool,
     pub register: usize,
-    pub rhs: ExpressionNode
+    pub rhs: ExpressionNode,
+    pub is_mono: bool
 }
 
 #[derive(Debug)]
 pub struct RefUnrefNode {
     pub is_unref: bool,
     pub register: usize,
-    pub rhs: LookupNode
+    pub rhs: LookupNode,
+    pub is_mono: bool
 }
 
 #[derive(Debug)]
 pub struct ModopNode {
     pub lookup: LookupNode,
     pub op: interpreter::Instruction,
-    pub rhs: ExpressionNode
+    pub rhs: ExpressionNode,
+    pub is_mono: bool
 }
 
 #[derive(Debug)]
