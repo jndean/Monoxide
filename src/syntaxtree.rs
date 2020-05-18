@@ -89,7 +89,8 @@ pub struct ModopNode {
 pub struct PushPullNode {
     pub is_push: bool,
     pub register: usize,
-    pub lookup: LookupNode
+    pub lookup: LookupNode,
+    pub is_mono: bool,
 }
 
 #[derive(Debug)]

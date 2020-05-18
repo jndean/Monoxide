@@ -441,8 +441,14 @@ impl PT::Statement for PT::PushPullNode {
         let register = if self.is_push {ctx.remove_variable(&self.name)}
                        else            {ctx.create_variable(&self.name)};
         let lookup = self.lookup.to_syntax_node_unboxed(ctx);
+        let is_mono = self.name.starts_with(".");
 
-        Box::new(ST::PushPullNode{register, lookup, is_push: self.is_push})
+        assert!(is_mono == lookup.var_is_mono,
+            "Can only push to / pull from a variable of matching mono-ness");
+        assert!(is_mono == lookup.is_mono,
+                "Mono information used to push/pull non-mono variable \"{}\"", self.name);
+
+        Box::new(ST::PushPullNode{register, lookup, is_mono, is_push: self.is_push})
     }
 }
 
