@@ -456,9 +456,16 @@ impl PT::Statement for PT::IfNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
         let fwd_expr = self.fwd_expr.to_syntax_node(ctx);
         let bkwd_expr = self.bkwd_expr.to_syntax_node(ctx);
-        let if_stmts = self.if_stmts.into_iter().map(|s| s.to_syntax_node(ctx)).collect();
-        let else_stmts = self.else_stmts.into_iter().map(|s| s.to_syntax_node(ctx)).collect();
-        Box::new(ST::IfNode{fwd_expr, if_stmts, else_stmts, bkwd_expr})
+        let if_stmts: Vec<_> = self.if_stmts.into_iter().map(|s| s.to_syntax_node(ctx)).collect();
+        let else_stmts: Vec<_> = self.else_stmts.into_iter().map(|s| s.to_syntax_node(ctx)).collect();
+        let is_mono = fwd_expr.is_mono();
+
+        let all_mono_stmts = if_stmts.iter().chain(else_stmts.iter()).all(|s| s.is_mono());
+        assert!(!is_mono || all_mono_stmts, "Non-mono statement in mono if-statement");
+        assert!(!bkwd_expr.is_mono(), "Backward condition in if statement is mono");
+
+
+        Box::new(ST::IfNode{fwd_expr, if_stmts, else_stmts, bkwd_expr, is_mono})
     }
 }
 
@@ -466,8 +473,16 @@ impl PT::Statement for PT::WhileNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
         let fwd_expr = self.fwd_expr.to_syntax_node(ctx);
         let bkwd_expr = self.bkwd_expr.map(|x| x.to_syntax_node(ctx));
-        let stmts = self.stmts.into_iter().map(|s| s.to_syntax_node(ctx)).collect();
-        Box::new(ST::WhileNode{fwd_expr, stmts, bkwd_expr})
+        let stmts: Vec<_> = self.stmts.into_iter().map(|s| s.to_syntax_node(ctx)).collect();
+        let is_mono = fwd_expr.is_mono();
+
+        let all_mono_stmts = stmts.iter().all(|s| s.is_mono());
+        assert!(!is_mono || all_mono_stmts, "Non-mono statement in mono while loop");
+        if let Some(expr) = &bkwd_expr {
+            assert!(!expr.is_mono(), "Backward condition in while loop is mono");
+        }
+
+        Box::new(ST::WhileNode{fwd_expr, stmts, bkwd_expr, is_mono})
     }
 }
 
@@ -545,9 +560,12 @@ impl PT::Statement for PT::CallNode {
             return_args.push(ctx.create_variable(&arg));
             // TODO: Using create variable is WRONG
         }
+        // TODO: Get is_mono from function prototype
+        let is_mono = false;
+
         Box::new(ST::CallNode{
             is_uncall: self.is_uncall,
-            func_idx, borrow_args, stolen_args, return_args
+            func_idx, borrow_args, stolen_args, return_args, is_mono
         })
     }
 }

@@ -201,6 +201,8 @@ impl ST::Expression for ST::ArrayLiteralNode {
 
 
 impl ST::Statement for ST::LetUnletNode {
+    fn is_mono(&self) -> bool {self.is_mono}
+
     fn compile(&self) -> Code {
         let mut code = Code::new();
         if self.is_unlet {
@@ -222,6 +224,8 @@ impl ST::Statement for ST::LetUnletNode {
 
 
 impl ST::Statement for ST::RefUnrefNode {
+    fn is_mono(&self) -> bool {self.is_mono}
+
     fn compile(&self) -> Code {
         let mut create_ref = self.rhs.compile();
         create_ref.push(Instruction::StoreRegister{register: self.register});
@@ -241,6 +245,8 @@ impl ST::Statement for ST::RefUnrefNode {
 
 
 impl ST::Statement for ST::ModopNode {
+    fn is_mono(&self) -> bool {self.is_mono}
+
     fn compile(&self) -> Code {
         let lookup = self.lookup.compile();
         let rhs = self.rhs.compile();
@@ -272,6 +278,8 @@ impl ST::Statement for ST::ModopNode {
 }
 
 impl ST::Statement for ST::PushPullNode {
+    fn is_mono(&self) -> bool {self.is_mono}
+    
     fn compile(&self) -> Code {
         let mut code = Code::new();
         let lookup = self.lookup.compile();
@@ -298,6 +306,8 @@ impl ST::Statement for ST::PushPullNode {
 
 
 impl ST::Statement for ST::IfNode {
+    fn is_mono(&self) -> bool {self.is_mono}
+    
     fn compile(&self) -> Code {
         let fwd_expr = self.fwd_expr.compile();
         let bkwd_expr = self.bkwd_expr.compile();
@@ -336,6 +346,8 @@ impl ST::Statement for ST::IfNode {
 
 
 impl ST::Statement for ST::WhileNode {
+    fn is_mono(&self) -> bool {self.is_mono}
+    
     fn compile(&self) -> Code {
         let fwd_expr = self.fwd_expr.compile();
         let bkwd_expr = self.bkwd_expr.as_ref(). unwrap().compile();
@@ -377,6 +389,8 @@ impl ST::Statement for ST::WhileNode {
 
 
 impl ST::Statement for ST::CatchNode {
+    fn is_mono(&self) -> bool {true}
+    
     fn compile(&self) -> Code {
         let mut code = Code::new();
         code.append_fwd(self.expr.compile());
@@ -387,6 +401,8 @@ impl ST::Statement for ST::CatchNode {
 }
 
 impl ST::Statement for ST::CallNode {
+    fn is_mono(&self) -> bool {self.is_mono}
+    
     fn compile(&self) -> Code {
         let mut code = Code::new();
 

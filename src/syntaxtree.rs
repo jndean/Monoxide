@@ -56,6 +56,7 @@ pub struct UniopNode {
 
 
 pub trait Statement: Debug {
+    fn is_mono(&self) -> bool;
     fn compile(&self) -> compiler::Code;
 }
 
@@ -98,14 +99,16 @@ pub struct IfNode {
     pub fwd_expr: ExpressionNode,
     pub if_stmts: Vec<StatementNode>,
     pub else_stmts: Vec<StatementNode>,
-    pub bkwd_expr: ExpressionNode
+    pub bkwd_expr: ExpressionNode,
+    pub is_mono: bool
 }
 
 #[derive(Debug)]
 pub struct WhileNode {
     pub fwd_expr: ExpressionNode,
     pub stmts: Vec<StatementNode>,
-    pub bkwd_expr: Option<ExpressionNode>
+    pub bkwd_expr: Option<ExpressionNode>,
+    pub is_mono: bool
 }
 
 #[derive(Debug)]
@@ -119,7 +122,8 @@ pub struct CallNode {
     pub func_idx: usize,
     pub borrow_args: Vec<LookupNode>,
     pub stolen_args: Vec<usize>,
-    pub return_args: Vec<usize>
+    pub return_args: Vec<usize>,
+    pub is_mono: bool
 }
 
 
