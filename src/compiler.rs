@@ -64,6 +64,15 @@ impl Code {
         self.bkwd.len()
     }
 
+    pub fn clear_bkwd(&mut self) {
+        if self.bkwd.len() == 0 {return};
+        for instruction in self.bkwd.drain(..) {
+            if let Instruction::Reverse{idx: _} = instruction {
+                panic!("Internal inconsistency: clear_bkwd called on a Reverse instruction");
+            }
+        }
+    }
+
     pub fn extend(&mut self, other: Code) {
         let Code{fwd, bkwd, f2b_links, b2f_links} = other;
         let (flen, blen) = (self.fwd.len(), self.bkwd.len());
@@ -218,6 +227,8 @@ impl ST::Statement for ST::LetUnletNode {
 
             code.push_bkwd(Instruction::FreeRegister{register: self.register});
         }
+
+        if self.is_mono {code.clear_bkwd();}
         code
     }
 }
@@ -239,6 +250,8 @@ impl ST::Statement for ST::RefUnrefNode {
             code.append_fwd(create_ref);
             code.append_bkwd(remove_ref);
         }
+
+        if self.is_mono {code.clear_bkwd();}
         code
     }
 }
@@ -273,6 +286,7 @@ impl ST::Statement for ST::ModopNode {
         code.push_bkwd(Instruction::DuplicateRef);
         code.append_bkwd(lookup);
         
+        if self.is_mono {code.clear_bkwd();}
         code
     }
 }
@@ -299,7 +313,8 @@ impl ST::Statement for ST::PushPullNode {
             code.push_bkwd(Instruction::Push{register});
             code.append_bkwd(lookup);
         }
-
+        
+        if self.is_mono {code.clear_bkwd();}
         code
     }
 }
@@ -340,6 +355,7 @@ impl ST::Statement for ST::IfNode {
         code.push_bkwd(Instruction::RelativeJumpIfTrue{delta: else_bkwd_len + 2});
         code.append_bkwd(bkwd_expr);
 
+        if self.is_mono {code.clear_bkwd();}
         code
     }
 }
@@ -383,6 +399,7 @@ impl ST::Statement for ST::WhileNode {
 
         code.append_bkwd(bkwd_expr);
 
+        if self.is_mono {code.clear_bkwd();}
         code
     }
 }
@@ -426,6 +443,7 @@ impl ST::Statement for ST::CallNode {
             code.push_fwd(Instruction::StoreRegister{register});
         }
 
+        if self.is_mono {code.clear_bkwd();}
         code
     }
 }
