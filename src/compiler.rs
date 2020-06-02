@@ -118,6 +118,9 @@ impl Code {
                 Instruction::RelativeJumpIfFalse{delta} => {
                     fwd[i] = Instruction::JumpIfFalse{ip: (i as isize + delta) as usize}
                 },
+                Instruction::StepIter{ip} => {
+                    fwd[i] = Instruction::StepIter{ip: i + ip}
+                },
                 _ => {}
             }
         }
@@ -131,6 +134,9 @@ impl Code {
                 },
                 Instruction::RelativeJumpIfFalse{delta} => {
                     bkwd[i] = Instruction::JumpIfFalse{ip: (i as isize + delta) as usize}
+                },
+                Instruction::StepIter{ip} => {
+                    bkwd[i] = Instruction::StepIter{ip: i + ip}
                 },
                 _ => {}
             }
@@ -399,6 +405,39 @@ impl ST::Statement for ST::WhileNode {
 
         code.append_bkwd(bkwd_expr);
 
+        if self.is_mono {code.clear_bkwd();}
+        code
+    }
+}
+
+
+impl ST::Statement for ST::ForNode {
+    fn is_mono(&self) -> bool {self.is_mono}
+    
+    fn compile(&self) -> Code {
+        let iter_lookup = self.iterator.compile();
+
+        let mut stmts = Code::new();
+        for stmt in self.stmts.iter() {
+            stmts.extend(stmt.compile());
+        }
+        let stmts_fwd_len = stmts.fwd_len();
+        let stmts_bkwd_len = stmts.bkwd_len();
+
+        let mut code = Code::new();
+        
+        code.append_fwd(iter_lookup.clone());
+        code.push_fwd(Instruction::CreateIter{register: self.register});
+        code.push_fwd(Instruction::StepIter{ip: stmts_fwd_len + 2});
+        code.push_bkwd(Instruction::RelativeJump{delta: -(1 + stmts_bkwd_len as isize)});
+
+        code.extend(stmts);
+
+        code.push_fwd(Instruction::RelativeJump{delta: -(1 + stmts_fwd_len as isize)});
+        code.push_bkwd(Instruction::StepIter{ip: stmts_bkwd_len + 2});
+        code.push_bkwd(Instruction::CreateIter{register: self.register});
+        code.append_bkwd(iter_lookup);
+        
         if self.is_mono {code.clear_bkwd();}
         code
     }

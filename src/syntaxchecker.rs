@@ -4,6 +4,8 @@ use std::cell::RefCell;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
+use num_traits::identities::Zero;
+
 use crate::interpreter;
 use crate::parsetree as PT;
 use crate::syntaxtree as ST;
@@ -49,6 +51,17 @@ pub struct SyntaxContext<'a> {
     last_var_id: usize
 }
 
+/* 
+TODO: add context-inheritance to SyntaxContexts (ctx.parent: SyntaxContext)
+      Disallow unitialising vars from parent contexts, to call out issues like
+
+if (1) {
+    a := 0;
+} else {
+    a =: 0;
+} ~if(1);
+
+*/
 
 impl<'a> SyntaxContext<'a> {
     pub fn new(functions: &'a HashMap<String, ST::FunctionPrototype>) -> SyntaxContext<'a> {
@@ -483,6 +496,36 @@ impl PT::Statement for PT::WhileNode {
         }
 
         Box::new(ST::WhileNode{fwd_expr, stmts, bkwd_expr, is_mono})
+    }
+}
+
+impl PT::Statement for PT::ForNode {
+    fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
+
+        let mut zero_lookup = self.iterator.clone();
+        zero_lookup.indices.push(Box::new(PT::FractionNode{value: interpreter::Fraction::zero()}));
+        
+        let register = ctx.create_ref(&self.iter_var, &zero_lookup);
+        let iterator = self.iterator.to_syntax_node_unboxed(ctx);
+        let stmts: Vec<_> = self.stmts.into_iter().map(|s| s.to_syntax_node(ctx)).collect();
+        let is_mono = self.iter_var.starts_with(".");
+
+        // ctx.remove_ref(&self.iter_var, &zero_lookup);
+        
+        if is_mono {
+            assert!(iterator.var_is_mono, "Mono for loop iterating over non-mono iterator");
+            assert!(stmts.iter().all(|s| s.is_mono()), "Non-mono statement in mono for loop");
+        } else {
+            assert!(!iterator.is_mono, "Assigning to non-mono iteration variable using mono information");
+        }
+        /* TODO: disallow modification of iterator indices in for-loop body e.g. 
+            for (_ in array[i]) {
+                i += 1;
+            }
+        is not invertible
+        */
+
+        Box::new(ST::ForNode{register, iterator, stmts, is_mono})
     }
 }
 

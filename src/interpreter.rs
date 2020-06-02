@@ -75,6 +75,19 @@ impl Index<usize> for Variable {
     }
 }
 
+#[derive(Debug, Clone)]
+struct IterState {
+    pub idx: usize,
+    pub register: usize,
+    pub var: Rc<RefCell<Variable>>
+}
+
+#[derive(Debug)]
+enum StackObject {
+    Var(Rc<RefCell<Variable>>),
+    Iter(IterState)
+}
+
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
@@ -104,14 +117,12 @@ pub enum Instruction {
     Uncall{idx: usize},
     DuplicateRef,
     UniqueVar,
+    CreateIter{register: usize},
+    StepIter{ip: usize},
     Quit,
     DebugPrint,
 }
 
-#[derive(Debug)]
-pub enum StackObject {
-    Var(Rc<RefCell<Variable>>),
-}
 
 #[derive(Debug)]
 pub struct Code {
@@ -279,6 +290,8 @@ impl<'a> Interpreter<'a> {
                     Instruction::CreateArray{size} => self.create_array(*size),
                     Instruction::Pull{register} => self.pull(*register),
                     Instruction::Push{register} => self.push(*register),
+                    Instruction::CreateIter{register} => self.create_iter(*register),
+                    Instruction::StepIter{ip} => {self.step_iter(*ip); continue 'refresh_instructions},
                     
                     Instruction::Jump{ip} => {self.jump(*ip); continue 'refresh_instructions},
                     Instruction::JumpIfTrue{ip} => {self.jump_if_true(*ip); continue 'refresh_instructions},
@@ -528,6 +541,36 @@ impl<'a> Interpreter<'a> {
             Variable::Array(items) => items.push(src_ref),
             Variable::Frac(_) => panic!("Pushing onto number")
         }
+    }
+
+    fn create_iter(&mut self, register: usize) {
+        let var = self.pop_var();
+        let iter_state = IterState{register, var, idx: 0};
+        self.stack.push(StackObject::Iter(iter_state));
+    }
+
+    fn step_iter(&mut self, ip: usize) {
+        // Get iterator state off the stack
+        let (idx, var, register) = match self.stack.last_mut() {
+            Some(StackObject::Iter(IterState{idx, var, register})) => (idx, var.borrow(), *register),
+            _ => panic!("No IterState on the stack")
+        };
+        let array = match &*var {
+            Variable::Array(array) => array,
+            Variable::Frac(_) => panic!("For loop iterator must be an array, not a number")
+        };
+
+        // Step iteration, or jump to after loop if iterator exhausted
+        if (self.forwards && *idx >= array.len()) || (!self.forwards && *idx == 0) {
+            drop(var);
+            self.pop();
+            self.registers[register] = None;
+            self.jump(ip);
+        } else {
+            self.registers[register] = Some(Rc::clone(&array[*idx]));
+            *idx += 1;
+            self.ip += 1;
+        };
     }
 
     #[inline]

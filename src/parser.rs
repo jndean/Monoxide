@@ -7,7 +7,7 @@ use crate::parsetree::{
     StatementNode, ExpressionNode, LookupNode, LetUnletNode,
     FractionNode, BinopNode, IfNode, ModopNode, FunctionNode,
     CatchNode, ArrayLiteralNode, Module, RefUnrefNode, CallNode,
-    FunctionParam, PushPullNode, UniopNode, WhileNode
+    FunctionParam, PushPullNode, UniopNode, WhileNode, ForNode
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -327,6 +327,7 @@ impl Parser {
         if let Some(stmt) = self.pull_stmt() {return Some(stmt);}
         if let Some(stmt) = self.if_stmt() {return Some(stmt);}
         if let Some(stmt) = self.while_stmt() {return Some(stmt);}
+        if let Some(stmt) = self.for_stmt() {return Some(stmt);}
         if let Some(stmt) = self.catch_stmt() {return Some(stmt);}
         if let Some(stmt) = self.call_stmt() {return Some(stmt);}
         None
@@ -412,6 +413,28 @@ impl Parser {
         }}}}};
 
         self.reset(pos);
+        None
+    }
+
+    memoise!(for_stmt_ as for_stmt -> StatementNode);
+    pub fn for_stmt_(&mut self) -> Option<StatementNode> {
+        parse!(self;
+            "for",
+            "(",
+            iter_var : self.name(),
+            "in",
+            iterator : self.lookup(),
+            ")",
+            "{",
+            stmts : self.repeat(Parser::statement, true),
+            "}",
+            ";",
+            {
+                return Some(Box::new(
+                    ForNode{iter_var, iterator, stmts}
+                ));
+            }
+        );
         None
     }
 

@@ -112,6 +112,14 @@ pub struct WhileNode {
 }
 
 #[derive(Debug)]
+pub struct ForNode {
+    pub register: usize,
+    pub iterator: LookupNode,
+    pub stmts: Vec<StatementNode>,
+    pub is_mono: bool
+}
+
+#[derive(Debug)]
 pub struct CatchNode {
     pub expr: ExpressionNode
 }

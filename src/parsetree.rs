@@ -132,6 +132,13 @@ pub struct WhileNode {
 }
 
 #[derive(Clone, Debug)]
+pub struct ForNode {
+    pub iter_var: String,
+    pub iterator: LookupNode,
+    pub stmts: Vec<StatementNode>
+}
+
+#[derive(Clone, Debug)]
 pub struct CatchNode {
     pub expr: ExpressionNode
 }
