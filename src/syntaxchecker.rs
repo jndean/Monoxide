@@ -510,7 +510,7 @@ impl PT::Statement for PT::ForNode {
         let stmts: Vec<_> = self.stmts.into_iter().map(|s| s.to_syntax_node(ctx)).collect();
         let is_mono = self.iter_var.starts_with(".");
 
-        // ctx.remove_ref(&self.iter_var, &zero_lookup);
+        ctx.remove_ref(&self.iter_var, &zero_lookup);
         
         if is_mono {
             assert!(iterator.var_is_mono, "Mono for loop iterating over non-mono iterator");
