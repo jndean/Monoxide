@@ -23,7 +23,7 @@ fn fraction_to_f64(x: &Fraction) -> f64 {
 #[derive(PartialEq, Clone)]
 pub enum Variable {
     Frac(Fraction),
-    Array(Vec<Rc<RefCell<Variable>>>),
+    Array(Vec<Rc<RefCell<Variable>>>)
 }
 
 impl fmt::Debug for Variable {
@@ -119,6 +119,7 @@ pub enum Instruction {
     UniqueVar,
     CreateIter{register: usize},
     StepIter{ip: usize},
+    Print{idx: usize},
     Quit,
     DebugPrint,
 }
@@ -141,7 +142,8 @@ pub struct Interpreter<'a> {
     ip: usize,
     forwards: bool,
     registers: Vec<Option<Rc<RefCell<Variable>>>>,
-    consts: &'a Vec<Variable>
+    consts: &'a Vec<Variable>,
+    strings: &'a Vec<String>
 }
 
 
@@ -151,7 +153,8 @@ pub struct Scope<'a> {
     ip: usize,
     forwards: bool,
     registers: Vec<Option<Rc<RefCell<Variable>>>>,
-    consts: &'a Vec<Variable>
+    consts: &'a Vec<Variable>,
+    strings: &'a Vec<String>
 }
 
 
@@ -159,6 +162,7 @@ pub struct Scope<'a> {
 pub struct Function {
     pub code: Code,
     pub consts: Vec<Variable>,
+    pub strings: Vec<String>,
     pub num_registers: usize
 }
 
@@ -231,7 +235,8 @@ impl<'a> Interpreter<'a> {
             ip: 0,
             forwards: true,
             registers: vec![None; main.num_registers],
-            consts: &main.consts
+            consts: &main.consts,
+            strings: &main.strings
         };
         interpreter.execute();
         interpreter.debug_print();
@@ -290,6 +295,7 @@ impl<'a> Interpreter<'a> {
                     Instruction::CreateArray{size} => self.create_array(*size),
                     Instruction::Pull{register} => self.pull(*register),
                     Instruction::Push{register} => self.push(*register),
+                    Instruction::Print{idx} => self.print(*idx),
                     Instruction::CreateIter{register} => self.create_iter(*register),
                     Instruction::StepIter{ip} => {self.step_iter(*ip); continue 'refresh_instructions},
                     
@@ -319,6 +325,7 @@ impl<'a> Interpreter<'a> {
             Scope{
                 code      : replace(&mut self.code     , &func.code),
                 consts    : replace(&mut self.consts   , &func.consts),
+                strings   : replace(&mut self.strings  , &func.strings),
                 registers : replace(&mut self.registers, vec![None; func.num_registers]),
                 ip        : replace(&mut self.ip       , 0),
                 forwards  : replace(&mut self.forwards , forwards)
@@ -542,6 +549,10 @@ impl<'a> Interpreter<'a> {
             Variable::Frac(_) => panic!("Pushing onto number")
         }
     }
+
+    fn print(&mut self, idx: usize) {
+        print!("{}", self.strings[idx]);
+    } 
 
     fn create_iter(&mut self, register: usize) {
         let var = self.pop_var();

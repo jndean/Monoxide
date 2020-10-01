@@ -7,7 +7,8 @@ use crate::parsetree::{
     StatementNode, ExpressionNode, LookupNode, LetUnletNode,
     FractionNode, BinopNode, IfNode, ModopNode, FunctionNode,
     CatchNode, ArrayLiteralNode, Module, RefUnrefNode, CallNode,
-    FunctionParam, PushPullNode, UniopNode, WhileNode, ForNode
+    FunctionParam, PushPullNode, UniopNode, WhileNode, ForNode,
+    PrintNode
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -321,6 +322,7 @@ impl Parser {
 
     memoise!(statement_ as statement -> StatementNode);
     pub fn statement_(&mut self) -> Option<StatementNode> {
+        if let Some(stmt) = self.print_stmt() {return Some(stmt);}
         if let Some(stmt) = self.letunlet_stmt() {return Some(stmt);}
         if let Some(stmt) = self.refunref_stmt() {return Some(stmt);}
         if let Some(stmt) = self.modop_stmt() {return Some(stmt);}
@@ -536,6 +538,35 @@ impl Parser {
         }}}};
         self.reset(pos);
                     
+        None
+    }
+
+    memoise!(print_stmt_ as print_stmt -> StatementNode);
+    pub fn print_stmt_(&mut self) -> Option<StatementNode> {
+        let pos = self.mark();
+        
+        if self.expect_literal("print") {
+        if self.expect_literal("(") {
+        if let Some(argument) = self.expect_type("STRING") {
+        if self.expect_literal(")") {
+        if self.expect_literal(";") {
+            return Some(Box::new(
+                PrintNode{string_: argument.string_}
+            ));
+        }}}}};
+        self.reset(pos);
+
+        if self.expect_literal("println") {
+        if self.expect_literal("(") {
+        if let Some(argument) = self.expect_type("STRING") {
+        if self.expect_literal(")") {
+        if self.expect_literal(";") {
+            return Some(Box::new(
+                PrintNode{string_: argument.string_ + "\n"}
+            ));
+        }}}}};
+
+        self.reset(pos);
         None
     }
 

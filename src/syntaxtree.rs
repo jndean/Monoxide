@@ -63,6 +63,11 @@ pub trait Statement: Debug {
 pub type StatementNode = Box<dyn Statement>;
 
 #[derive(Debug)]
+pub struct PrintNode {
+    pub str_idx: usize
+}
+
+#[derive(Debug)]
 pub struct LetUnletNode {
     pub is_unlet: bool,
     pub register: usize,
@@ -156,6 +161,7 @@ pub struct FunctionPrototype {
 pub struct FunctionNode {
     pub stmts: Vec<StatementNode>,
     pub consts: Vec<interpreter::Variable>,
+    pub strings: Vec<String>,
     pub num_registers: usize,
 
     pub borrow_registers: Vec<usize>,

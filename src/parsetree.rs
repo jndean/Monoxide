@@ -89,6 +89,11 @@ impl Clone for StatementNode {
 }
 
 #[derive(Clone, Debug)]
+pub struct PrintNode {
+    pub string_: String
+}
+
+#[derive(Clone, Debug)]
 pub struct LetUnletNode {
     pub is_unlet: bool,
     pub name: String,

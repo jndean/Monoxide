@@ -214,6 +214,18 @@ impl ST::Expression for ST::ArrayLiteralNode {
 
 // ------------------------------ Statement Nodes ------------------------------ //
 
+impl ST::Statement for ST::PrintNode {
+    fn is_mono(&self) -> bool {true}
+
+    fn compile(&self) -> Code {
+        let mut code = Code::with_capacity(1, 1);
+        code.push_fwd(Instruction::Print{idx: self.str_idx});
+        code.push_bkwd(Instruction::Print{idx: self.str_idx});
+
+        code
+    }
+}
+
 
 impl ST::Statement for ST::LetUnletNode {
     fn is_mono(&self) -> bool {self.is_mono}
@@ -508,6 +520,7 @@ impl ST::FunctionNode {
 
         interpreter::Function{
             consts: self.consts.clone(),
+            strings: self.strings.clone(),
             code: Code::finalise(code),
             num_registers: self.num_registers
         }

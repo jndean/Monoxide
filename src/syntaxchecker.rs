@@ -45,6 +45,7 @@ pub struct Reference {
 pub struct SyntaxContext<'a> {
     functions: &'a HashMap<String, ST::FunctionPrototype>,
     consts: Vec<interpreter::Variable>,
+    strings: Vec<String>,
     free_registers: Vec<usize>,
     local_variables: HashMap<String, Reference>,
     num_registers: usize,
@@ -68,6 +69,7 @@ impl<'a> SyntaxContext<'a> {
         SyntaxContext{
             functions,
             consts: Vec::new(),
+            strings: Vec::new(),
             free_registers: Vec::new(),
             local_variables: HashMap::new(),
             num_registers: 0,
@@ -208,7 +210,17 @@ impl<'a> SyntaxContext<'a> {
             if *existing == val {return i}
         }
         self.consts.push(val);
+
         self.consts.len() - 1
+    }
+
+    fn add_string(&mut self, string_: String) -> usize {
+        for (i, existing) in self.strings.iter().enumerate() {
+            if *existing == string_ {return i}
+        }
+        self.strings.push(string_);
+
+        self.strings.len() - 1
     }
 
     fn lookup_function_prototype(&self, name: &str) -> &ST::FunctionPrototype {
@@ -393,6 +405,14 @@ impl PT::LookupNode {
 
 // ---------------------------- Statement Nodes ---------------------------- //
 
+
+impl PT::Statement for PT::PrintNode {
+    fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
+        let str_idx = ctx.add_string(self.string_);
+
+        Box::new(ST::PrintNode{str_idx})
+    }
+}
 
 impl PT::Statement for PT::LetUnletNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
@@ -630,6 +650,7 @@ impl PT::FunctionNode {
         ST::FunctionNode{
             stmts, borrow_registers, steal_registers, return_registers,
             consts: ctx.consts,
+            strings: ctx.strings,
             num_registers: ctx.num_registers
         }
     }

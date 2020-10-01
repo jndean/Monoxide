@@ -18,7 +18,7 @@ fn main() {
     
     let src = fs::read_to_string("examples/tmp.mx").expect("File io error");
     let tokens = tokeniser::tokenise(&src);
-    // println!("{:#?}", tokens);
+    println!("Tokens: {:#?}", tokens);
     let parsed = parser::parse(tokens).expect("Failed to parse");
     let module = syntaxchecker::check_syntax(parsed);
     // println!("Module: {:#?}", module);

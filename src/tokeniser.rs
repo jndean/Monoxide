@@ -15,6 +15,7 @@ pub fn tokenise(data: &String) -> Vec<Token> {
 
     let name_regex = regex::Regex::new(r"^[a-zA-Z_][a-zA-Z_0-9\.]*").unwrap();
     let number_regex = regex::Regex::new(r"^\d+(/\d+)?").unwrap();
+    let string_regex = regex::Regex::new(r"^'[^']*'").unwrap();
     let ignore_regex = regex::Regex::new(r"^(([$][^$]*[$])|([ \t\r\f\v]+))").unwrap();
     let newline_regex = regex::Regex::new(r"^\n").unwrap();
     let symbol_regex = regex::Regex::new(&(String::from(r"^(")
@@ -76,6 +77,23 @@ pub fn tokenise(data: &String) -> Vec<Token> {
             pos += m.end();
             line += 1;
             col = 0;
+            continue;
+        }
+
+        if let Some(m) = string_regex.find(&data[pos..]) {
+            ret.push(Token{
+                type_: String::from("STRING"), 
+                string_: String::from(&data[pos .. pos + m.end()]),
+                line, col
+            });
+            let newlines:Vec<_> = data[pos .. pos + m.end()].match_indices("\n").collect();
+            pos += m.end();
+            line += newlines.len();
+            if let Some(idx) = newlines.last() {
+                col = m.end() - 1 - idx.0;
+            } else {
+                col += m.end();
+            }
             continue;
         }
         
