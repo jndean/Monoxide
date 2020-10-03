@@ -584,8 +584,8 @@ impl<'a> Interpreter<'a> {
             Variable::Array(array) => array.len(),
             _ => panic!("For loop iterator is not an array")
         };
-        let idx = if self.forwards {0}
-                  else {array_len as isize - 1};
+        let idx = if self.forwards {-1}
+                  else {array_len as isize};
         let iter_state = IterState{register, var, idx};
         self.stack.push(StackObject::Iter(iter_state));
     }
@@ -602,14 +602,15 @@ impl<'a> Interpreter<'a> {
         };
 
         // Step iteration, or jump to after loop if iterator exhausted
-        if (self.forwards && *idx == array.len() as isize) || (!self.forwards && *idx == -1) {
+        if (self.forwards && *idx == array.len() as isize - 1) || 
+           (!self.forwards && *idx == 0) {
             drop(var);
             self.pop();
             self.registers[register] = None;
             self.jump(ip);
         } else {
-            self.registers[register] = Some(Rc::clone(&array[*idx as usize]));
             *idx += if self.forwards {1} else {-1};
+            self.registers[register] = Some(Rc::clone(&array[*idx as usize]));
             self.ip += 1;
         };
     }

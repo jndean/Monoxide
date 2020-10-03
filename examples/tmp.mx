@@ -1,12 +1,12 @@
 
 fn main()() {
 
-    X := [1,2,3,4];
-    
+    X := [0,1,2,3,4];
+
     for (x in X) {
         println('Val: ', x);
-        catch(x == 2);
     };
 
+    catch(1);
 
 } ~main()
