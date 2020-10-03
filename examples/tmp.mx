@@ -1,19 +1,12 @@
 
 fn main()() {
 
-    x := 5/6;
+    X := [1,2,3,4];
     
-    names := [
-        'Josef',
-        'Katharine',
-        'Steve'
-    ];
-    println(names);
-    
-    for (name in names) {
-        println('hello: ', name);
+    for (x in X) {
+        println('Val: ', x);
+        catch(x == 2);
     };
 
-    catch(1);
 
 } ~main()

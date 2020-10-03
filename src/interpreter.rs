@@ -101,7 +101,7 @@ impl Index<usize> for Variable {
 
 #[derive(Debug, Clone)]
 struct IterState {
-    pub idx: usize,
+    pub idx: isize,
     pub register: usize,
     pub var: Rc<RefCell<Variable>>
 }
@@ -283,7 +283,7 @@ impl<'a> Interpreter<'a> {
                     }
                 };
 
-                // println!("{} IP: {}, {:?}", if self.forwards {"FWD"} else {"BKWD"}, self.ip, instruction);
+                println!("{} IP: {}, {:?}", if self.forwards {"FWD"} else {"BKWD"}, self.ip, instruction);
 
                 match instruction {
                     Instruction::LoadConst{idx} => self.load_const(*idx),
@@ -580,7 +580,13 @@ impl<'a> Interpreter<'a> {
 
     fn create_iter(&mut self, register: usize) {
         let var = self.pop_var();
-        let iter_state = IterState{register, var, idx: 0};
+        let array_len = match &*var.borrow() {
+            Variable::Array(array) => array.len(),
+            _ => panic!("For loop iterator is not an array")
+        };
+        let idx = if self.forwards {0}
+                  else {array_len as isize - 1};
+        let iter_state = IterState{register, var, idx};
         self.stack.push(StackObject::Iter(iter_state));
     }
 
@@ -596,14 +602,14 @@ impl<'a> Interpreter<'a> {
         };
 
         // Step iteration, or jump to after loop if iterator exhausted
-        if (self.forwards && *idx >= array.len()) || (!self.forwards && *idx == 0) {
+        if (self.forwards && *idx == array.len() as isize) || (!self.forwards && *idx == -1) {
             drop(var);
             self.pop();
             self.registers[register] = None;
             self.jump(ip);
         } else {
-            self.registers[register] = Some(Rc::clone(&array[*idx]));
-            *idx += 1;
+            self.registers[register] = Some(Rc::clone(&array[*idx as usize]));
+            *idx += if self.forwards {1} else {-1};
             self.ip += 1;
         };
     }
