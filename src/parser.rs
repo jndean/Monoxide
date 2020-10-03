@@ -8,7 +8,7 @@ use crate::parsetree::{
     FractionNode, BinopNode, IfNode, ModopNode, FunctionNode,
     CatchNode, ArrayLiteralNode, Module, RefUnrefNode, CallNode,
     FunctionParam, PushPullNode, UniopNode, WhileNode, ForNode,
-    PrintNode
+    PrintNode, StringNode
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -547,24 +547,24 @@ impl Parser {
         
         if self.expect_literal("print") {
         if self.expect_literal("(") {
-        if let Some(argument) = self.expect_type("STRING") {
+        let items = self.join(Parser::expression, ",");
         if self.expect_literal(")") {
         if self.expect_literal(";") {
             return Some(Box::new(
-                PrintNode{string_: argument.string_}
+                PrintNode{items, newline: false}
             ));
-        }}}}};
+        }}}};
         self.reset(pos);
 
         if self.expect_literal("println") {
         if self.expect_literal("(") {
-        if let Some(argument) = self.expect_type("STRING") {
+        let items = self.join(Parser::expression, ",");
         if self.expect_literal(")") {
         if self.expect_literal(";") {
             return Some(Box::new(
-                PrintNode{string_: argument.string_ + "\n"}
+                PrintNode{items, newline: true}
             ));
-        }}}}};
+        }}}};
 
         self.reset(pos);
         None
@@ -807,6 +807,11 @@ impl Parser {
         if let Some(token) = self.expect_type("NUMBER") {
             let value = Fraction::from_str(&token.string_[..]).unwrap();
             let value = FractionNode{value};
+            return Some(Box::new(value));
+        };
+
+        if let Some(token) = self.expect_type("STRING") {
+            let value = StringNode{value: token.string_.clone()};
             return Some(Box::new(value));
         };
 

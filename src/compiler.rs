@@ -155,6 +155,15 @@ impl ST::Expression for ST::FractionNode {
     }
 }
 
+impl ST::Expression for ST::StringNode {
+    fn is_mono(&self) -> bool {false}
+    fn used_vars(&self) -> &HashSet<usize> {&self.used_vars}
+
+    fn compile(&self) -> Vec<Instruction> {
+        vec![Instruction::LoadConst{idx: self.const_idx}]
+    }
+}
+
 impl ST::Expression for ST::LookupNode {
     fn is_mono(&self) -> bool {self.is_mono}
     fn used_vars(&self) -> &HashSet<usize> {&self.used_vars}
@@ -218,9 +227,20 @@ impl ST::Statement for ST::PrintNode {
     fn is_mono(&self) -> bool {true}
 
     fn compile(&self) -> Code {
-        let mut code = Code::with_capacity(1, 1);
-        code.push_fwd(Instruction::Print{idx: self.str_idx});
-        code.push_bkwd(Instruction::Print{idx: self.str_idx});
+        let mut count = self.items.len() as isize;
+        if self.newline {count *= -1};
+
+        let mut code = Code::new();
+
+        for item in self.items.iter().rev() {
+            code.append_fwd(item.compile());
+        }
+        code.push_fwd(Instruction::Print{count});
+
+        code.push_bkwd(Instruction::Print{count});
+        for item in self.items.iter() {
+            code.append_bkwd(item.compile());
+        }
 
         code
     }
@@ -520,7 +540,6 @@ impl ST::FunctionNode {
 
         interpreter::Function{
             consts: self.consts.clone(),
-            strings: self.strings.clone(),
             code: Code::finalise(code),
             num_registers: self.num_registers
         }

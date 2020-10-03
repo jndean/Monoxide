@@ -23,14 +23,36 @@ fn fraction_to_f64(x: &Fraction) -> f64 {
 #[derive(PartialEq, Clone)]
 pub enum Variable {
     Frac(Fraction),
-    Array(Vec<Rc<RefCell<Variable>>>)
+    Array(Vec<Rc<RefCell<Variable>>>),
+    Str(String)
 }
 
 impl fmt::Debug for Variable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Variable::Frac(val) => write!(f, "{}", val),
-            Variable::Array(vec) => write!(f, "Array({:#?})", vec)
+            Variable::Array(vec) => write!(f, "Array({:#?})", vec),
+            Variable::Str(string) => write!(f, "{}", string)
+        }
+    }
+}
+
+impl fmt::Display for Variable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Variable::Frac(val) => write!(f, "{}", val),
+            Variable::Str(string) => write!(f, "{}", string),
+            Variable::Array(vec) => {
+                let mut out = String::new();
+                for item in vec[0..vec.len() - 1].iter() {
+                    out.push_str(&item.borrow().to_string());
+                    out.push_str(", ");
+                }
+                if let Some(item) = vec.last(){
+                    out.push_str(&item.borrow().to_string());
+                }
+                write!(f, "[{}]", out)
+            }
         }
     }
 }
@@ -39,20 +61,22 @@ impl Variable {
     fn to_bool(&self) -> bool {
         match self {
             Variable::Frac(value) => !value.is_zero(),
-            Variable::Array(items) => items.len() > 0
+            Variable::Array(items) => items.len() > 0,
+            Variable::Str(string) => string.len() > 0
         }
     }
 
     fn to_usize(&self) -> usize {
         match self {
             Variable::Frac(value) => value.to_integer().to_usize().unwrap(),
-            Variable::Array(_) => panic!("Index is not a number")
+            _ => panic!("Index is not a number")
         }
     }
 
     fn deep_copy(&self) -> Self {
         match self {
             Variable::Frac(value) => Variable::Frac(value.clone()),
+            Variable::Str(value) => Variable::Str(value.clone()),
             Variable::Array(items) => {
                 Variable::Array(
                     items.iter().map(
@@ -70,7 +94,7 @@ impl Index<usize> for Variable {
     fn index(&self, idx: usize) -> &Self::Output {
         match self {
             Variable::Array(items) => &items[idx],
-            Variable::Frac(_) => panic!("Indexing into number")
+            _ => panic!("Indexing is only supported by arrays")
         }
     }
 }
@@ -119,7 +143,7 @@ pub enum Instruction {
     UniqueVar,
     CreateIter{register: usize},
     StepIter{ip: usize},
-    Print{idx: usize},
+    Print{count: isize},
     Quit,
     DebugPrint,
 }
@@ -142,8 +166,7 @@ pub struct Interpreter<'a> {
     ip: usize,
     forwards: bool,
     registers: Vec<Option<Rc<RefCell<Variable>>>>,
-    consts: &'a Vec<Variable>,
-    strings: &'a Vec<String>
+    consts: &'a Vec<Variable>
 }
 
 
@@ -153,8 +176,7 @@ pub struct Scope<'a> {
     ip: usize,
     forwards: bool,
     registers: Vec<Option<Rc<RefCell<Variable>>>>,
-    consts: &'a Vec<Variable>,
-    strings: &'a Vec<String>
+    consts: &'a Vec<Variable>
 }
 
 
@@ -162,7 +184,6 @@ pub struct Scope<'a> {
 pub struct Function {
     pub code: Code,
     pub consts: Vec<Variable>,
-    pub strings: Vec<String>,
     pub num_registers: usize
 }
 
@@ -235,11 +256,10 @@ impl<'a> Interpreter<'a> {
             ip: 0,
             forwards: true,
             registers: vec![None; main.num_registers],
-            consts: &main.consts,
-            strings: &main.strings
+            consts: &main.consts
         };
         interpreter.execute();
-        interpreter.debug_print();
+        // interpreter.debug_print();
     }
 
     pub fn execute(&mut self) -> () {
@@ -263,7 +283,7 @@ impl<'a> Interpreter<'a> {
                     }
                 };
 
-                println!("{} IP: {}, {:?}", if self.forwards {"FWD"} else {"BKWD"}, self.ip, instruction);
+                // println!("{} IP: {}, {:?}", if self.forwards {"FWD"} else {"BKWD"}, self.ip, instruction);
 
                 match instruction {
                     Instruction::LoadConst{idx} => self.load_const(*idx),
@@ -295,7 +315,7 @@ impl<'a> Interpreter<'a> {
                     Instruction::CreateArray{size} => self.create_array(*size),
                     Instruction::Pull{register} => self.pull(*register),
                     Instruction::Push{register} => self.push(*register),
-                    Instruction::Print{idx} => self.print(*idx),
+                    Instruction::Print{count} => self.print(*count),
                     Instruction::CreateIter{register} => self.create_iter(*register),
                     Instruction::StepIter{ip} => {self.step_iter(*ip); continue 'refresh_instructions},
                     
@@ -325,7 +345,6 @@ impl<'a> Interpreter<'a> {
             Scope{
                 code      : replace(&mut self.code     , &func.code),
                 consts    : replace(&mut self.consts   , &func.consts),
-                strings   : replace(&mut self.strings  , &func.strings),
                 registers : replace(&mut self.registers, vec![None; func.num_registers]),
                 ip        : replace(&mut self.ip       , 0),
                 forwards  : replace(&mut self.forwards , forwards)
@@ -508,7 +527,7 @@ impl<'a> Interpreter<'a> {
         let expr = self.pop_var();
         let result = match &*expr.borrow() {
             Variable::Frac(x) => Variable::Frac(-x),
-            Variable::Array(_) => panic!("Takinging the negative of an array"),
+            _ => panic!("The negation operation is only supported by numbers"),
         };
         self.stack.push(StackObject::Var(Rc::new(RefCell::new(result))));
     }
@@ -531,7 +550,7 @@ impl<'a> Interpreter<'a> {
                 Some(item) => item,
                 None => panic!("Pulling from empty array")
             },
-            Variable::Frac(_) => panic!("Pulling from number")
+            _ => panic!("Pulling is only supported by arrays")
         };
         replace(
             self.registers.get_mut(register).unwrap(),
@@ -546,12 +565,17 @@ impl<'a> Interpreter<'a> {
         ).unwrap();
         match &mut *self.pop_var().borrow_mut() {
             Variable::Array(items) => items.push(src_ref),
-            Variable::Frac(_) => panic!("Pushing onto number")
+            _ => panic!("Pushing is only supported by arrays")
         }
     }
 
-    fn print(&mut self, idx: usize) {
-        print!("{}", self.strings[idx]);
+    fn print(&mut self, count: isize) {
+        for _ in 0..count.abs() {
+            print!("{}", self.pop_var().borrow());
+        }
+        if count < 0 {
+            print!("\n");
+        }
     } 
 
     fn create_iter(&mut self, register: usize) {
@@ -568,7 +592,7 @@ impl<'a> Interpreter<'a> {
         };
         let array = match &*var {
             Variable::Array(array) => array,
-            Variable::Frac(_) => panic!("For loop iterator must be an array, not a number")
+            _ => panic!("For loop iterator is not an array")
         };
 
         // Step iteration, or jump to after loop if iterator exhausted

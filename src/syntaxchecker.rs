@@ -214,15 +214,6 @@ impl<'a> SyntaxContext<'a> {
         self.consts.len() - 1
     }
 
-    fn add_string(&mut self, string_: String) -> usize {
-        for (i, existing) in self.strings.iter().enumerate() {
-            if *existing == string_ {return i}
-        }
-        self.strings.push(string_);
-
-        self.strings.len() - 1
-    }
-
     fn lookup_function_prototype(&self, name: &str) -> &ST::FunctionPrototype {
         self.functions.get(name).expect("Undefined function")
     }
@@ -347,6 +338,15 @@ impl PT::Expression for PT::FractionNode {
     }
 }
 
+impl PT::Expression for PT::StringNode {
+    fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Expression> {
+        let const_idx = ctx.add_const(
+            interpreter::Variable::Str(self.value)
+        );
+        Box::new(ST::StringNode{const_idx, used_vars: HashSet::new()})
+    }
+}
+
 impl PT::Expression for PT::BinopNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Expression> {
         let lhs = self.lhs.to_syntax_node(ctx);
@@ -408,9 +408,12 @@ impl PT::LookupNode {
 
 impl PT::Statement for PT::PrintNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
-        let str_idx = ctx.add_string(self.string_);
+        let items = self.items.into_iter()
+                              .map(|i| i.to_syntax_node(ctx))
+                              .collect::<Vec<ST::ExpressionNode>>();
+        let newline = self.newline;
 
-        Box::new(ST::PrintNode{str_idx})
+        Box::new(ST::PrintNode{items, newline})
     }
 }
 
@@ -756,7 +759,7 @@ pub fn check_syntax(module: PT::Module) -> ST::Module{
         }
     }
 
-    println!("PROTOTYPES {:#?}", func_prototypes);
+    // println!("PROTOTYPES {:#?}", func_prototypes);
 
     let mut main_idx = None;
     let mut functions = Vec::with_capacity(module.functions.len());

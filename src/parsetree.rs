@@ -40,6 +40,11 @@ impl fmt::Debug for FractionNode {
 }
 
 #[derive(Clone, Debug)]
+pub struct StringNode {
+    pub value: String
+}
+
+#[derive(Clone, Debug)]
 pub struct ArrayLiteralNode {
     pub items: Vec<ExpressionNode>
 }
@@ -90,7 +95,8 @@ impl Clone for StatementNode {
 
 #[derive(Clone, Debug)]
 pub struct PrintNode {
-    pub string_: String
+    pub items: Vec<ExpressionNode>,
+    pub newline: bool
 }
 
 #[derive(Clone, Debug)]

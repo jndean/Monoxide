@@ -83,7 +83,7 @@ pub fn tokenise(data: &String) -> Vec<Token> {
         if let Some(m) = string_regex.find(&data[pos..]) {
             ret.push(Token{
                 type_: String::from("STRING"), 
-                string_: String::from(&data[pos .. pos + m.end()]),
+                string_: String::from(&data[pos + 1 .. pos + m.end() - 1]),
                 line, col
             });
             let newlines:Vec<_> = data[pos .. pos + m.end()].match_indices("\n").collect();

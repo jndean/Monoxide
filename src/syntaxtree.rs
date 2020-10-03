@@ -20,6 +20,12 @@ pub struct FractionNode {
     pub used_vars: HashSet<usize>
 }
 
+#[derive(Clone, Debug)]
+pub struct StringNode {
+    pub const_idx: usize,
+    pub used_vars: HashSet<usize>
+}
+
 #[derive(Debug)]
 pub struct ArrayLiteralNode {
     pub items: Vec<ExpressionNode>,
@@ -64,7 +70,8 @@ pub type StatementNode = Box<dyn Statement>;
 
 #[derive(Debug)]
 pub struct PrintNode {
-    pub str_idx: usize
+    pub items: Vec<ExpressionNode>,
+    pub newline: bool
 }
 
 #[derive(Debug)]
