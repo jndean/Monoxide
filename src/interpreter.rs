@@ -283,7 +283,7 @@ impl<'a> Interpreter<'a> {
                     }
                 };
 
-                println!("{} IP: {}, {:?}", if self.forwards {"FWD"} else {"BKWD"}, self.ip, instruction);
+                // println!("{} IP: {}, {:?}", if self.forwards {"FWD"} else {"BKWD"}, self.ip, instruction);
 
                 match instruction {
                     Instruction::LoadConst{idx} => self.load_const(*idx),
