@@ -390,6 +390,18 @@ impl PT::Expression for PT::ArrayLiteralNode {
     }
 }
 
+impl PT::Expression for PT::ArrayRepeatNode {
+    fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Expression> {
+        let item = self.item.to_syntax_node(ctx);
+        let dimensions = self.dimensions.to_syntax_node(ctx);
+        let is_mono = item.is_mono() || dimensions.is_mono();
+        let mut used_vars = item.used_vars().clone();
+        used_vars.extend(dimensions.used_vars());
+
+        Box::new(ST::ArrayRepeatNode{item, dimensions, used_vars, is_mono})
+    }
+}
+
 impl PT::Expression for PT::LookupNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Expression> {
         Box::new(self.to_syntax_node_unboxed(ctx))

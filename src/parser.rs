@@ -8,7 +8,7 @@ use crate::parsetree::{
     FractionNode, BinopNode, IfNode, ModopNode, FunctionNode,
     CatchNode, ArrayLiteralNode, Module, RefUnrefNode, CallNode,
     FunctionParam, PushPullNode, UniopNode, WhileNode, ForNode,
-    PrintNode, StringNode, DoYieldNode
+    PrintNode, StringNode, DoYieldNode, ArrayRepeatNode
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -45,6 +45,7 @@ pub enum Parsed {
     FunctionNode(Option<FunctionNode>),
     FunctionParam(Option<FunctionParam>),
     ArrayLiteralNode(Option<ArrayLiteralNode>),
+    ArrayRepeatNode(Option<ArrayRepeatNode>),
     Module(Option<Module>)
 }
 
@@ -837,6 +838,10 @@ impl Parser {
             return Some(Box::new(array));
         };
 
+        if let Some(array) = self.array_repeat() {
+            return Some(Box::new(array));
+        };
+
         if let Some(lookup) = self.lookup() {
             return Some(Box::new(lookup));
         };
@@ -882,6 +887,21 @@ impl Parser {
         }}
 
         self.reset(pos);
+        None
+    }
+
+    memoise!(array_repeat_ as array_repeat -> ArrayRepeatNode);
+    pub fn array_repeat_(&mut self) -> Option<ArrayRepeatNode> {
+        parse!(self;
+            "[",
+            item : self.expression(),
+            "repeat",
+            dimensions : self.expression(),
+            "]",
+            {
+                return Some(ArrayRepeatNode{item, dimensions});
+            }
+        );
         None
     }
 

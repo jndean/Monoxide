@@ -50,6 +50,12 @@ pub struct ArrayLiteralNode {
 }
 
 #[derive(Clone, Debug)]
+pub struct ArrayRepeatNode {
+    pub item: ExpressionNode,
+    pub dimensions: ExpressionNode
+}
+
+#[derive(Clone, Debug)]
 pub struct LookupNode {
     pub name: String,
     pub indices: Vec<ExpressionNode>

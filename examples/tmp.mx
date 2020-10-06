@@ -1,21 +1,17 @@
 
 fn main()() {
-    
-    result := 0;
 
-    do {
-        x := 1;
-        y := [2,3,4,5];
-        sum := 0;
-        for (item in y) {
-            sum += item;
-        };
-    } yield {
-        result += sum + x;
-    } ~do;
-    
-    println('Result: ', result);
+    println( 
+        [9 repeat [2, 3]] 
+    );
 
+    println(
+        [1 repeat [0, 0]]
+    );
+
+    println(
+        [[1, 'Hi'] repeat 10]
+    );
 
 
 } ~main()

@@ -44,12 +44,12 @@ impl fmt::Display for Variable {
             Variable::Str(string) => write!(f, "{}", string),
             Variable::Array(vec) => {
                 let mut out = String::new();
-                for item in vec[0..vec.len() - 1].iter() {
-                    out.push_str(&item.borrow().to_string());
-                    out.push_str(", ");
-                }
-                if let Some(item) = vec.last(){
-                    out.push_str(&item.borrow().to_string());
+                if vec.len() > 0 {
+                    for item in vec[0..vec.len() - 1].iter() {
+                        out.push_str(&item.borrow().to_string());
+                        out.push_str(", ");
+                    }
+                    out.push_str(&vec.last().unwrap().borrow().to_string());
                 }
                 write!(f, "[{}]", out)
             }
@@ -136,7 +136,8 @@ pub enum Instruction {
     RelativeJump{delta: isize},
     RelativeJumpIfTrue{delta: isize},
     RelativeJumpIfFalse{delta: isize},
-    CreateArray{size: usize},
+    ArrayLiteral{size: usize},
+    ArrayRepeat,
     Call{idx: usize},
     Uncall{idx: usize},
     DuplicateRef,
@@ -259,7 +260,7 @@ impl<'a> Interpreter<'a> {
             consts: &main.consts
         };
         interpreter.execute();
-        interpreter.debug_print();
+        // interpreter.debug_print();
     }
 
     pub fn execute(&mut self) -> () {
@@ -312,7 +313,8 @@ impl<'a> Interpreter<'a> {
                     Instruction::BinopXor => self.binop_xor(),
                     Instruction::UniopNeg => self.uniop_neg(),
                     Instruction::UniopNot => self.uniop_not(),
-                    Instruction::CreateArray{size} => self.create_array(*size),
+                    Instruction::ArrayLiteral{size} => self.array_literal(*size),
+                    Instruction::ArrayRepeat => self.array_repeat(),
                     Instruction::Pull{register} => self.pull(*register),
                     Instruction::Push{register} => self.push(*register),
                     Instruction::Print{count} => self.print(*count),
@@ -413,7 +415,7 @@ impl<'a> Interpreter<'a> {
         self.registers[idx] = None;
     }
 
-    pub fn create_array(&mut self, size: usize) {
+    pub fn array_literal(&mut self, size: usize) {
         let mut items = Vec::with_capacity(size);
         for _ in 0..size {
             let mut item = self.pop_var();
@@ -426,6 +428,38 @@ impl<'a> Interpreter<'a> {
         self.stack.push(StackObject::Var(Rc::new(RefCell::new(
             Variable::Array(items)
         ))));
+    }
+
+    pub fn array_repeat(&mut self) {
+
+        let dimensions = self.pop_var();
+        let content = self.pop_var();
+
+        let dimensions: Vec<_> = match &*dimensions.borrow() {
+            Variable::Array(array) => array.iter().map(|d| d.borrow().to_usize()).collect(),
+            Variable::Frac(value) => vec![value.to_integer().to_usize().unwrap()],
+            Variable::Str(_) => panic!("Array repetition dimensions must be specified in an array")
+        };
+        
+        fn recursive_array_maker(content: &Variable, dims: &[usize]) -> Vec<Rc<RefCell<Variable>>> {
+            let mut ret = Vec::with_capacity(dims[0]);
+            if dims.len() == 1 {
+                for _ in 0..dims[0] {
+                    ret.push(Rc::new(RefCell::new(content.deep_copy())));
+                }
+            } else {
+                for _ in 0..dims[0] {
+                    ret.push(Rc::new(RefCell::new(Variable::Array(
+                        recursive_array_maker(content, &dims[1..])
+                    ))));
+                }
+            }
+            ret
+        }
+
+        let array = recursive_array_maker(&*content.borrow(), dimensions.as_slice());
+        let var = Rc::new(RefCell::new(Variable::Array(array)));
+        self.stack.push(StackObject::Var(var));
     }
 
     fn subscript(&mut self, size: usize) {

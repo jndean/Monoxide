@@ -234,7 +234,19 @@ impl ST::Expression for ST::ArrayLiteralNode {
         for item in self.items.iter().rev() {
             ret.extend(item.compile());
         }
-        ret.push(Instruction::CreateArray{size: self.items.len()});
+        ret.push(Instruction::ArrayLiteral{size: self.items.len()});
+        ret
+    }
+}
+
+impl ST::Expression for ST::ArrayRepeatNode {
+    fn is_mono(&self) -> bool {self.is_mono}
+    fn used_vars(&self) -> &HashSet<usize> {&self.used_vars}
+    
+    fn compile(&self) -> Vec<Instruction> {
+        let mut ret = self.item.compile();
+        ret.extend(self.dimensions.compile());
+        ret.push(Instruction::ArrayRepeat);
         ret
     }
 }

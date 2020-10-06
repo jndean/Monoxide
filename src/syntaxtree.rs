@@ -34,6 +34,14 @@ pub struct ArrayLiteralNode {
 }
 
 #[derive(Debug)]
+pub struct ArrayRepeatNode {
+    pub item: ExpressionNode,
+    pub dimensions: ExpressionNode,
+    pub is_mono: bool,
+    pub used_vars: HashSet<usize>
+}
+
+#[derive(Debug)]
 pub struct LookupNode {
     pub register: usize,
     pub indices: Vec<ExpressionNode>,
