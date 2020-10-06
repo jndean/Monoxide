@@ -6,7 +6,7 @@ use crate::interpreter;
 use interpreter::Instruction;
 
 
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct Code {
     fwd: Vec<Instruction>,
     bkwd: Vec<Instruction>,
@@ -83,6 +83,25 @@ impl Code {
         }
         for (b, f) in b2f_links.into_iter() {
             self.b2f_links.push((b + blen, f + flen));
+        }
+    }
+
+    pub fn reversed(mut self) -> Code {
+        for (f, b) in self.f2b_links.iter_mut() {
+            *f = self.fwd.len() - *f;
+            *b = self.bkwd.len() - *b;
+        }
+        for (b, f) in self.b2f_links.iter_mut() {
+            *f = self.fwd.len() - *f;
+            *b = self.bkwd.len() - *b;
+        }
+        self.bkwd.reverse();
+        self.fwd.reverse();
+        Code{
+            fwd: self.bkwd,
+            bkwd: self.fwd,
+            f2b_links: self.b2f_links,
+            b2f_links: self.f2b_links
         }
     }
 
@@ -241,7 +260,8 @@ impl ST::Statement for ST::PrintNode {
         for item in self.items.iter() {
             code.append_bkwd(item.compile());
         }
-
+        
+        if self.is_mono {code.clear_bkwd();}
         code
     }
 }
@@ -471,6 +491,25 @@ impl ST::Statement for ST::ForNode {
         code.append_bkwd(iter_lookup);
         
         if self.is_mono {code.clear_bkwd();}
+        code
+    }
+}
+
+impl ST::Statement for ST::DoYieldNode {
+    fn is_mono(&self) -> bool {false}
+    
+    fn compile(&self) -> Code {
+
+        let mut code = Code::new();
+        for do_stmt in self.do_stmts.iter() {
+            code.extend(do_stmt.compile());
+        }
+        let undo_block = code.clone().reversed();
+        for yield_stmt in self.yield_stmts.iter() {
+            code.extend(yield_stmt.compile());
+        }
+        code.extend(undo_block);
+        
         code
     }
 }

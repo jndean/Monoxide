@@ -1,18 +1,21 @@
 
 fn main()() {
-
-    x := [1, 2, 3, [4, 5, 6]];
-    println(x);
     
-    y := &x[3];
+    result := 0;
 
-    if (1) {
-        z := &y[0];
-        z += 1;
-        z =: &y[0];
-    } ~if();
+    do {
+        x := 1;
+        y := [2,3,4,5];
+        sum := 0;
+        for (item in y) {
+            sum += item;
+        };
+    } yield {
+        result += sum + x;
+    } ~do;
+    
+    println('Result: ', result);
 
-    println(x);
 
-    catch(1);
+
 } ~main()

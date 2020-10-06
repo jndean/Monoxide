@@ -8,7 +8,7 @@ use crate::parsetree::{
     FractionNode, BinopNode, IfNode, ModopNode, FunctionNode,
     CatchNode, ArrayLiteralNode, Module, RefUnrefNode, CallNode,
     FunctionParam, PushPullNode, UniopNode, WhileNode, ForNode,
-    PrintNode, StringNode
+    PrintNode, StringNode, DoYieldNode
 };
 use crate::interpreter::{Fraction, Instruction};
 
@@ -39,6 +39,7 @@ pub enum Parsed {
     LookupNode(Option<LookupNode>),
     PushPullNode(Option<PushPullNode>),
     IfNode(Option<IfNode>),
+    DoYieldNode(Option<DoYieldNode>),
     CatchNode(Option<CatchNode>),
     CallNode(Option<CallNode>),
     FunctionNode(Option<FunctionNode>),
@@ -330,6 +331,7 @@ impl Parser {
         if let Some(stmt) = self.if_stmt() {return Some(stmt);}
         if let Some(stmt) = self.while_stmt() {return Some(stmt);}
         if let Some(stmt) = self.for_stmt() {return Some(stmt);}
+        if let Some(stmt) = self.doyield_stmt() {return Some(stmt);}
         if let Some(stmt) = self.catch_stmt() {return Some(stmt);}
         if let Some(stmt) = self.call_stmt() {return Some(stmt);}
         None
@@ -416,6 +418,41 @@ impl Parser {
 
         self.reset(pos);
         None
+    }
+
+    memoise!(doyield_stmt_ as doyield_stmt -> StatementNode);
+    pub fn doyield_stmt_(&mut self) -> Option<StatementNode> {
+        parse!(self;
+            "do",
+            "{",
+            do_stmts : self.repeat(Parser::statement, true),
+            "}",
+            yield_stmts : self.yield_block(),
+            "~",
+            "do",
+            ";",
+            {
+                return Some(Box::new(
+                    DoYieldNode{do_stmts, yield_stmts}
+                ));
+            }
+        );
+        None
+    }
+    
+    memoise!(yield_block_ as yield_block -> VecStatementNode);
+    pub fn yield_block_(&mut self) -> Option<Vec<StatementNode>> {
+        let pos = self.mark();
+
+        if self.expect_literal("yield") {
+        if self.expect_literal("{") {
+        if let Some(stmts) = self.statements() {
+        if self.expect_literal("}") {
+            return Some(stmts);
+        }}}};
+        self.reset(pos);
+
+        Some(Vec::new())
     }
 
     memoise!(for_stmt_ as for_stmt -> StatementNode);

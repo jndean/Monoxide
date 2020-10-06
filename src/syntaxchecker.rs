@@ -329,6 +329,10 @@ impl<'a> SyntaxContext<'a> {
         }
         mem::replace(&mut self.locals, self.locals_stack.pop().expect("Failed to pop from locals_stack"));
     }
+
+    fn exit_block_nocheck(&mut self) {
+        mem::replace(&mut self.locals, self.locals_stack.pop().expect("Failed to pop from locals_stack"));
+    }
 }
 
 
@@ -417,8 +421,9 @@ impl PT::Statement for PT::PrintNode {
                               .map(|i| i.to_syntax_node(ctx))
                               .collect::<Vec<ST::ExpressionNode>>();
         let newline = self.newline;
+        let is_mono = items.iter().any(|i| i.is_mono());
 
-        Box::new(ST::PrintNode{items, newline})
+        Box::new(ST::PrintNode{items, newline, is_mono})
     }
 }
 
@@ -562,6 +567,20 @@ impl PT::Statement for PT::ForNode {
         */
 
         Box::new(ST::ForNode{register, iterator, stmts, is_mono})
+    }
+}
+
+impl PT::Statement for PT::DoYieldNode {
+    fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Box<dyn ST::Statement> {
+
+        ctx.enter_block();
+        let do_stmts: Vec<_> = self.do_stmts.into_iter().map(|s| s.to_syntax_node(ctx)).collect();
+        ctx.enter_block();
+        let yield_stmts: Vec<_> = self.yield_stmts.into_iter().map(|s| s.to_syntax_node(ctx)).collect();
+        ctx.exit_block();
+        ctx.exit_block_nocheck();  // The undo WILL free locals properly
+
+        Box::new(ST::DoYieldNode{do_stmts, yield_stmts})
     }
 }
 

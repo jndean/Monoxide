@@ -259,7 +259,7 @@ impl<'a> Interpreter<'a> {
             consts: &main.consts
         };
         interpreter.execute();
-        // interpreter.debug_print();
+        interpreter.debug_print();
     }
 
     pub fn execute(&mut self) -> () {

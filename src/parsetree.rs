@@ -150,6 +150,12 @@ pub struct ForNode {
 }
 
 #[derive(Clone, Debug)]
+pub struct DoYieldNode {
+    pub do_stmts: Vec<StatementNode>,
+    pub yield_stmts: Vec<StatementNode>
+}
+
+#[derive(Clone, Debug)]
 pub struct CatchNode {
     pub expr: ExpressionNode
 }

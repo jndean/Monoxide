@@ -71,7 +71,8 @@ pub type StatementNode = Box<dyn Statement>;
 #[derive(Debug)]
 pub struct PrintNode {
     pub items: Vec<ExpressionNode>,
-    pub newline: bool
+    pub newline: bool,
+    pub is_mono: bool,
 }
 
 #[derive(Debug)]
@@ -129,6 +130,12 @@ pub struct ForNode {
     pub iterator: LookupNode,
     pub stmts: Vec<StatementNode>,
     pub is_mono: bool
+}
+
+#[derive(Debug)]
+pub struct DoYieldNode {
+    pub do_stmts: Vec<StatementNode>,
+    pub yield_stmts: Vec<StatementNode>
 }
 
 #[derive(Debug)]
