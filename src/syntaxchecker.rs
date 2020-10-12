@@ -50,13 +50,17 @@ pub struct SyntaxContext<'a> {
     free_registers: Vec<usize>,
     locals: HashMap<String, Reference>,
     locals_stack: Vec<HashMap<String, Reference>>,
+    globals: &'a HashMap<String, usize>,
     num_registers: usize,
     last_var_id: usize
 }
 
 
 impl<'a> SyntaxContext<'a> {
-    pub fn new(functions: &'a HashMap<String, ST::FunctionPrototype>) -> SyntaxContext<'a> {
+    pub fn new(
+        functions: &'a HashMap<String, ST::FunctionPrototype>,
+        globals: &'a HashMap<String, usize>
+    ) -> SyntaxContext<'a> {
         SyntaxContext {
             functions,
             consts: Vec::new(),
@@ -64,6 +68,7 @@ impl<'a> SyntaxContext<'a> {
             free_registers: Vec::new(),
             locals: HashMap::new(),
             locals_stack: Vec::new(),
+            globals,
             num_registers: 0,
             last_var_id: 0
         }
@@ -327,7 +332,7 @@ impl<'a> SyntaxContext<'a> {
         if self.locals.len() > 0 {
             panic!("Leaving block with dangling variable references");
         }
-        mem::replace(&mut self.locals, self.locals_stack.pop().expect("Failed to pop from locals_stack"));
+        self.exit_block_nocheck();
     }
 
     fn exit_block_nocheck(&mut self) {
@@ -526,7 +531,6 @@ impl PT::Statement for PT::IfNode {
         assert!(!is_mono || all_mono_stmts, "Non-mono statement in mono if-statement");
         assert!(!bkwd_expr.is_mono(), "Backward condition in if statement is mono");
 
-
         Box::new(ST::IfNode{fwd_expr, if_stmts, else_stmts, bkwd_expr, is_mono})
     }
 }
@@ -683,10 +687,19 @@ impl PT::Statement for PT::CallNode {
 impl PT::FunctionNode {
     fn to_syntax_node(
         self,
-        func_lookup: &HashMap<String, ST::FunctionPrototype>
+        func_lookup: &HashMap<String, ST::FunctionPrototype>,
+        global_register_names: &HashMap<String, usize>,
     ) -> ST::FunctionNode {
+        self.to_syntax_node_and_register_names(func_lookup, global_register_names).0
+    }
 
-        let mut ctx = SyntaxContext::new(func_lookup);
+    fn to_syntax_node_and_register_names(
+        self,
+        func_lookup: &HashMap<String, ST::FunctionPrototype>,
+        global_register_names: &HashMap<String, usize>,
+    ) -> (ST::FunctionNode, HashMap<String, usize>) {
+
+        let mut ctx = SyntaxContext::new(func_lookup, global_register_names);
         let (link_set, borrow_registers, steal_registers) = ctx.init_func(
             self.owned_links, self.borrow_params, self.steal_params);
         let stmts = self.stmts.into_iter()
@@ -694,13 +707,16 @@ impl PT::FunctionNode {
                               .collect();
         let return_registers = ctx.end_func(link_set, self.return_params);
 
-        ST::FunctionNode{
+        let function_node = ST::FunctionNode{
             stmts, borrow_registers, steal_registers, return_registers,
             consts: ctx.consts,
-            strings: ctx.strings,
             num_registers: ctx.num_registers
-        }
+        };
+        let register_names = ctx.locals.into_iter().map(|(name, var)| (name, var.register)).collect();
+
+        (function_node, register_names)
     }
+
 }
 
 impl ST::FunctionPrototype {
@@ -790,10 +806,9 @@ impl ST::FunctionPrototype {
     }
 }
 
-
 pub fn check_syntax(module: PT::Module) -> ST::Module{
+    // Collect the properties of all the module functions
     let mut func_prototypes = HashMap::new();
-
     for f in module.functions.iter() {
         if func_prototypes.insert(
             f.name.clone(),
@@ -803,17 +818,19 @@ pub fn check_syntax(module: PT::Module) -> ST::Module{
         }
     }
 
-    // println!("PROTOTYPES {:#?}", func_prototypes);
+    // Check the syntax of the global scope pseudo function, and get the global names
+    let (global_func, global_registers) 
+        = module.global_func.to_syntax_node_and_register_names(&func_prototypes, &HashMap::new());
 
+    // Check the syntax of each function, and find the main function
     let mut main_idx = None;
     let mut functions = Vec::with_capacity(module.functions.len());
-
     for (i, f) in module.functions.into_iter().enumerate() {
         if f.name == "main" {main_idx = Some(i)}
-        functions.push(f.to_syntax_node(&func_prototypes));
+        functions.push(f.to_syntax_node(&func_prototypes, &global_registers));
     }
 
-    ST::Module{functions, main_idx}
+    ST::Module{functions, main_idx, global_func}
 }
 
 

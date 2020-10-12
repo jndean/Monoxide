@@ -116,8 +116,10 @@ enum StackObject {
 #[derive(Debug, Clone)]
 pub enum Instruction {
     LoadConst{idx: usize},
+    LoadGlobalRegister{register: usize},
     LoadRegister{register: usize},
     StoreRegister{register: usize},
+    StoreGlobalRegister{register: usize},
     FreeRegister{register: usize},
     Subscript{size: usize},
     Store,
@@ -167,6 +169,7 @@ pub struct Interpreter<'a> {
     ip: usize,
     forwards: bool,
     registers: Vec<Option<Rc<RefCell<Variable>>>>,
+    global_registers: Vec<Option<Rc<RefCell<Variable>>>>,
     consts: &'a Vec<Variable>
 }
 
@@ -188,9 +191,11 @@ pub struct Function {
     pub num_registers: usize
 }
 
+
 #[derive(Debug)]
 pub struct Module {
     pub main_idx: Option<usize>,
+    pub global_func_idx: usize,
     pub functions: Vec<Function>
 }
 
@@ -248,19 +253,22 @@ impl<'a> Interpreter<'a> {
 
     pub fn run(module: &Module) {
         let main_idx = module.main_idx.expect("No main function");
-        let main = module.functions.get(main_idx).unwrap();
+        let global_func = module.functions.get(module.global_func_idx).unwrap();
         let mut interpreter = Interpreter {
             functions: &module.functions,
             stack: Vec::new(),
             scope_stack: Vec::new(),
-            code: &main.code,
+            code: &global_func.code,
             ip: 0,
             forwards: true,
-            registers: vec![None; main.num_registers],
-            consts: &main.consts
+            registers: Vec::new(),
+            global_registers: vec![None; global_func.num_registers],
+            consts: &global_func.consts
         };
         interpreter.execute();
-        // interpreter.debug_print();
+        interpreter.call(main_idx, true);
+        interpreter.execute();
+        interpreter.debug_print();
     }
 
     pub fn execute(&mut self) -> () {
@@ -289,7 +297,9 @@ impl<'a> Interpreter<'a> {
                 match instruction {
                     Instruction::LoadConst{idx} => self.load_const(*idx),
                     Instruction::LoadRegister{register} => self.load_register(*register),
+                    Instruction::LoadGlobalRegister{register} => self.load_global_register(*register),
                     Instruction::StoreRegister{register} => self.store_register(*register),
+                    Instruction::StoreGlobalRegister{register} => self.store_global_register(*register),
                     Instruction::FreeRegister{register} => self.free_register(*register),
                     Instruction::Store => self.store(),
                     Instruction::Subscript{size} => self.subscript(*size),
@@ -341,8 +351,7 @@ impl<'a> Interpreter<'a> {
     }
 
     pub fn call(&mut self, func_idx: usize, forwards: bool) {
-        let func: &'a Function = self.functions.get(func_idx)
-                                               .expect("Call to undefined function");
+        let func: &'a Function = self.functions.get(func_idx).expect("Call to undefined function");
         self.scope_stack.push(
             Scope{
                 code      : replace(&mut self.code     , &func.code),
@@ -406,8 +415,19 @@ impl<'a> Interpreter<'a> {
     }
 
     #[inline]
+    fn load_global_register(&mut self, idx: usize) {
+        let new_var_ref = Rc::clone(self.global_registers[idx].as_ref().unwrap());
+        self.stack.push(StackObject::Var(new_var_ref));
+    }
+
+    #[inline]
     fn store_register(&mut self, idx: usize) {
         self.registers[idx] = Some(self.pop_var());
+    }
+
+    #[inline]
+    fn store_global_register(&mut self, idx: usize) {
+        self.global_registers[idx] = Some(self.pop_var());
     }
 
     #[inline]
@@ -664,8 +684,9 @@ impl<'a> Interpreter<'a> {
 
     pub fn debug_print(&self) {
         println!(
-            "registers: {:#?}\nStack: {:#?}\n----------", 
+            "registers: {:#?}\nglobals: {:#?}\nStack: {:#?}\n----------", 
             self.registers,
+            self.global_registers,
             self.stack);
     }
 }

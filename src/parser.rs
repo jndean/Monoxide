@@ -263,15 +263,22 @@ impl Parser {
 
     
     pub fn module(&mut self) -> Option<Module> {
-
         parse!(self;
+            global_stmts: self.repeat(Parser::global_statement, true),
             functions: self.repeat(Parser::function, false),
             _end: self.expect_type("END_MARKER!"),
             {
-                return Some(Module{functions});
+                let global_func = FunctionNode {
+                    name: String::from("!global!"),
+                    owned_links: Vec::new(),
+                    borrow_params: Vec::new(),
+                    steal_params: Vec::new(),
+                    return_params: Vec::new(),
+                    stmts: global_stmts                 
+                };
+                return Some(Module{global_func, functions});
             }
         );
-
         None
     }
 
@@ -289,7 +296,7 @@ impl Parser {
         let steal_params = self.join(Parser::function_param, ",");
         if self.expect_literal(")") {
         if self.expect_literal("{") {
-        if let Some(stmts) = self.statements() {
+        let stmts = self.repeat(Parser::statement, true).unwrap();
         if self.expect_literal("}") {
         if self.expect_literal("~") {
         if self.name() == Some(name.clone()) {
@@ -299,7 +306,7 @@ impl Parser {
             return Some(FunctionNode{
                 name, owned_links, borrow_params, steal_params, return_params, stmts
             });
-        }}}}}}}}}}}}};
+        }}}}}}}}}}}};
 
         self.reset(pos);
         None
@@ -316,12 +323,6 @@ impl Parser {
         Vec::new()
     }
 
-
-    memoise!(statements_ as statements -> VecStatementNode);
-    pub fn statements_(&mut self) -> Option<Vec<StatementNode>> {
-        self.repeat(Parser::statement, true)
-    }
-
     memoise!(statement_ as statement -> StatementNode);
     pub fn statement_(&mut self) -> Option<StatementNode> {
         if let Some(stmt) = self.print_stmt() {return Some(stmt);}
@@ -335,6 +336,15 @@ impl Parser {
         if let Some(stmt) = self.doyield_stmt() {return Some(stmt);}
         if let Some(stmt) = self.catch_stmt() {return Some(stmt);}
         if let Some(stmt) = self.call_stmt() {return Some(stmt);}
+        None
+    }  
+
+    memoise!(global_statement_ as global_statement -> StatementNode);
+    pub fn global_statement_(&mut self) -> Option<StatementNode> {
+        if let Some(stmt) = self.letunlet_stmt() {return Some(stmt);}
+        if let Some(stmt) = self.refunref_stmt() {return Some(stmt);}
+        if let Some(stmt) = self.modop_stmt() {return Some(stmt);}
+        if let Some(stmt) = self.pull_stmt() {return Some(stmt);}
         None
     }  
 
@@ -447,10 +457,10 @@ impl Parser {
 
         if self.expect_literal("yield") {
         if self.expect_literal("{") {
-        if let Some(stmts) = self.statements() {
+        let stmts = self.repeat(Parser::statement, true).unwrap();
         if self.expect_literal("}") {
             return Some(stmts);
-        }}}};
+        }}};
         self.reset(pos);
 
         Some(Vec::new())
@@ -543,10 +553,10 @@ impl Parser {
 
         if self.expect_literal("else") {
         if self.expect_literal("{") {
-        if let Some(stmts) = self.statements() {
+        let stmts = self.repeat(Parser::statement, true).unwrap();
         if self.expect_literal("}") {
             return Some(stmts);
-        }}}};
+        }}};
         self.reset(pos);
 
         None

@@ -595,15 +595,31 @@ impl ST::FunctionNode {
             num_registers: self.num_registers
         }
     }
+
+    pub fn compile_to_global(&self) -> interpreter::Function {
+        let mut func = self.compile();
+        for instruction in func.code.fwd.iter_mut().chain(func.code.bkwd.iter_mut()) {
+            match instruction {
+                interpreter::Instruction::LoadRegister{register} => {
+                    *instruction = interpreter::Instruction::LoadGlobalRegister{register: *register};
+                },
+                interpreter::Instruction::StoreRegister{register} => {
+                    *instruction = interpreter::Instruction::StoreGlobalRegister{register: *register};
+                }
+                _ => {}
+            }
+        };
+        func
+    }
 }
 
 impl ST::Module {
     pub fn compile(&self) -> interpreter::Module {
-        interpreter::Module{
-            main_idx: self.main_idx,
-            functions: self.functions.iter()
-                                     .map(|f| f.compile())
-                                     .collect()
-        }
+        let main_idx = self.main_idx;
+        let mut functions: Vec<_> = self.functions.iter().map(|f| f.compile()).collect();
+        let global_func_idx = functions.len();
+        functions.push(self.global_func.compile_to_global());
+
+        interpreter::Module{main_idx, functions, global_func_idx}
     }
 }

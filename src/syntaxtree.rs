@@ -183,7 +183,6 @@ pub struct FunctionPrototype {
 pub struct FunctionNode {
     pub stmts: Vec<StatementNode>,
     pub consts: Vec<interpreter::Variable>,
-    pub strings: Vec<String>,
     pub num_registers: usize,
 
     pub borrow_registers: Vec<usize>,
@@ -194,5 +193,6 @@ pub struct FunctionNode {
 #[derive(Debug)]
 pub struct Module {
     pub functions: Vec<FunctionNode>,
-    pub main_idx: Option<usize>
+    pub main_idx: Option<usize>,
+    pub global_func: FunctionNode
 }

@@ -194,5 +194,6 @@ pub struct FunctionNode {
 
 #[derive(Clone, Debug)]
 pub struct Module {
+    pub global_func: FunctionNode,
     pub functions: Vec<FunctionNode>
 }

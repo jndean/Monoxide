@@ -1,17 +1,26 @@
 
+W := 100;
+H := 98;
+
+W += H;
+
+
 fn main()() {
 
-    println( 
-        [9 repeat [2, 3]] 
-    );
+    X := [1, 2, 3, 4, 5];
 
-    println(
-        [1 repeat [0, 0]]
-    );
+    println(X[4]);
 
-    println(
-        [[1, 'Hi'] repeat 10]
-    );
+    run(X) => last;
 
+    last += 90;
+    println(X[4]);
+
+    catch(1);
 
 } ~main()
+
+
+fn run(X)() {
+    last := &X[4];
+} ~run(last)
