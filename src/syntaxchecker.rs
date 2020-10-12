@@ -575,11 +575,17 @@ impl PT::Statement for PT::ForNode {
         } else {
             assert!(!iterator.is_mono, "Assigning to non-mono iteration variable using mono information");
         }
-        /* TODO: disallow modification of iterator indices in for-loop body e.g. 
+        /* 
+        TODO: disallow modification of iterator indices in for-loop body e.g. 
             for (_ in array[i]) {
                 i += 1;
-            }
+            };
         is not invertible
+
+        TODO: Bug. It seems the itertation var is not properly linked as a ref to the iterator... can do
+            for (x in X) {
+                X[0] -= x;
+            };
         */
 
         Box::new(ST::ForNode{register, iterator, stmts, is_mono})

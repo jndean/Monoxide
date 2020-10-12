@@ -21,6 +21,6 @@ fn main()() {
 } ~main()
 
 
-fn run(X)() {
+fn run(&a X)() {
     last := &X[4];
-} ~run(last)
+} ~run(&a last)
