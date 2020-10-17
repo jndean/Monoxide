@@ -167,7 +167,7 @@ impl Code {
 
 impl ST::Expression for ST::FractionNode {
     fn is_mono(&self) -> bool {false}
-    fn used_vars(&self) -> &HashSet<usize> {&self.used_vars}
+    fn used_vars(&self) -> &HashSet<isize> {&self.used_vars}
 
     fn compile(&self) -> Vec<Instruction> {
         vec![Instruction::LoadConst{idx: self.const_idx}]
@@ -176,7 +176,7 @@ impl ST::Expression for ST::FractionNode {
 
 impl ST::Expression for ST::StringNode {
     fn is_mono(&self) -> bool {false}
-    fn used_vars(&self) -> &HashSet<usize> {&self.used_vars}
+    fn used_vars(&self) -> &HashSet<isize> {&self.used_vars}
 
     fn compile(&self) -> Vec<Instruction> {
         vec![Instruction::LoadConst{idx: self.const_idx}]
@@ -185,14 +185,20 @@ impl ST::Expression for ST::StringNode {
 
 impl ST::Expression for ST::LookupNode {
     fn is_mono(&self) -> bool {self.is_mono}
-    fn used_vars(&self) -> &HashSet<usize> {&self.used_vars}
+    fn used_vars(&self) -> &HashSet<isize> {&self.used_vars}
 
     fn compile(&self) -> Vec<Instruction> {
         let mut instructions = Vec::with_capacity(self.indices.len()+1);        
         for index in self.indices.iter().rev() {
             instructions.extend(index.compile());
         }
-        instructions.push(Instruction::LoadRegister{register:self.register});
+        
+        if self.is_global {
+            instructions.push(Instruction::LoadGlobalRegister{register:self.register});
+        } else {
+            instructions.push(Instruction::LoadRegister{register:self.register});
+        }
+
         if !self.indices.is_empty() {
             instructions.push(Instruction::Subscript{size: self.indices.len()});
         }
@@ -202,7 +208,7 @@ impl ST::Expression for ST::LookupNode {
 
 impl ST::Expression for ST::BinopNode {
     fn is_mono(&self) -> bool {self.is_mono}
-    fn used_vars(&self) -> &HashSet<usize> {&self.used_vars}
+    fn used_vars(&self) -> &HashSet<isize> {&self.used_vars}
 
     fn compile(&self) -> Vec<Instruction> {
         let mut ret = Vec::new();
@@ -215,7 +221,7 @@ impl ST::Expression for ST::BinopNode {
 
 impl ST::Expression for ST::UniopNode {
     fn is_mono(&self) -> bool {self.is_mono}
-    fn used_vars(&self) -> &HashSet<usize> {&self.used_vars} // TODO: can I provide a type-generic implementation?
+    fn used_vars(&self) -> &HashSet<isize> {&self.used_vars} // TODO: can I provide a type-generic implementation?
 
     fn compile(&self) -> Vec<Instruction> {
         let mut ret = Vec::new();
@@ -227,7 +233,7 @@ impl ST::Expression for ST::UniopNode {
 
 impl ST::Expression for ST::ArrayLiteralNode {
     fn is_mono(&self) -> bool {self.is_mono}
-    fn used_vars(&self) -> &HashSet<usize> {&self.used_vars}
+    fn used_vars(&self) -> &HashSet<isize> {&self.used_vars}
     
     fn compile(&self) -> Vec<Instruction> {
         let mut ret = Vec::with_capacity(self.items.len() + 1);
@@ -241,7 +247,7 @@ impl ST::Expression for ST::ArrayLiteralNode {
 
 impl ST::Expression for ST::ArrayRepeatNode {
     fn is_mono(&self) -> bool {self.is_mono}
-    fn used_vars(&self) -> &HashSet<usize> {&self.used_vars}
+    fn used_vars(&self) -> &HashSet<isize> {&self.used_vars}
     
     fn compile(&self) -> Vec<Instruction> {
         let mut ret = self.item.compile();

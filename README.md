@@ -13,34 +13,43 @@ A work in progress - Monoxide is mostly a direct descendant of my other reversib
 
 ### References
 
-Thanks to the new ability to create references, functions like the following are now possible
+One of the key ways Monoxide differs from Railway as a language if the ability to create references.
 
 ```Monoxide
-fn get_first_ref(&a array)() 
+x := 8;
+y := &x;
+y += 1;
+x =: 9;
+```
+
+References can cross scope boundaries, so for example the following function which gets a reference to the first item in an array is possible.
+
+```Monoxide
+fn get_first(&a array)() 
 {
     first := &array[0];
 } 
-~get_first_ref(&a first)
+~get_first(&a first)
 ```
 
-Additionally for loops can iterate a reference to the contents of arrays, unlike Railway which required the for loop to copy elements during iteration to avoid aliasing.
+Additionally for loops can not work by iterating a reference to the contents of arrays, unlike Railway which required the for loop to copy elements during iteration to avoid aliasing.
 
 ```Monoxide
 X := [1, 2, 3, 4];
 for (x in X) {
-	x += 1;
+    x /= 2;
 }
-X =: [2, 3, 4, 5];
+X =: [1/2, 1, 3/2, 2];
 ```
 
-As mentioned, these new references are safe because the syntax checker can statically track where them and throw compile-time errors when self-modification is possible.
+As mentioned, these new references are safe because the syntax checker can statically track them and throw compile-time errors when self-modification is possible.
 
 ```Monoxide
-x <= get_first_ref(X);
-X[0] += y;              $ Won't compile! $
+x <= get_first(X);
+X[0] += x;              $ Not reversibe, won't compile! $
 
 for (x in X) {
-    X[x] += 1;          $ Won't compile! $ 
+    X[x] += 1;          $ Not reversible, won't compile! $ 
 }
 ```
 

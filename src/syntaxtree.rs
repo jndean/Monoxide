@@ -8,7 +8,7 @@ use crate::compiler;
 
 pub trait Expression: Debug {
     fn is_mono(&self) -> bool;
-    fn used_vars(&self) -> &HashSet<usize>;
+    fn used_vars(&self) -> &HashSet<isize>;
     fn compile(&self) -> Vec<interpreter::Instruction>;
 }
 
@@ -17,20 +17,20 @@ pub type ExpressionNode = Box<dyn Expression>;
 #[derive(Clone, Debug)]
 pub struct FractionNode {
     pub const_idx: usize,
-    pub used_vars: HashSet<usize>
+    pub used_vars: HashSet<isize>
 }
 
 #[derive(Clone, Debug)]
 pub struct StringNode {
     pub const_idx: usize,
-    pub used_vars: HashSet<usize>
+    pub used_vars: HashSet<isize>
 }
 
 #[derive(Debug)]
 pub struct ArrayLiteralNode {
     pub items: Vec<ExpressionNode>,
     pub is_mono: bool,
-    pub used_vars: HashSet<usize>
+    pub used_vars: HashSet<isize>
 }
 
 #[derive(Debug)]
@@ -38,16 +38,17 @@ pub struct ArrayRepeatNode {
     pub item: ExpressionNode,
     pub dimensions: ExpressionNode,
     pub is_mono: bool,
-    pub used_vars: HashSet<usize>
+    pub used_vars: HashSet<isize>
 }
 
 #[derive(Debug)]
 pub struct LookupNode {
     pub register: usize,
+    pub is_global: bool,
     pub indices: Vec<ExpressionNode>,
     pub is_mono: bool,
     pub var_is_mono: bool,
-    pub used_vars: HashSet<usize>
+    pub used_vars: HashSet<isize>
 }
 
 #[derive(Debug)]
@@ -56,7 +57,7 @@ pub struct BinopNode {
     pub rhs: ExpressionNode,
     pub op: interpreter::Instruction,
     pub is_mono: bool,
-    pub used_vars: HashSet<usize>
+    pub used_vars: HashSet<isize>
 }
 
 #[derive(Debug)]
@@ -64,7 +65,7 @@ pub struct UniopNode {
     pub expr: ExpressionNode,
     pub op: interpreter::Instruction,
     pub is_mono: bool,
-    pub used_vars: HashSet<usize>
+    pub used_vars: HashSet<isize>
 }
 
 

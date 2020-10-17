@@ -268,7 +268,6 @@ impl<'a> Interpreter<'a> {
         interpreter.execute();
         interpreter.call(main_idx, true);
         interpreter.execute();
-        interpreter.debug_print();
     }
 
     pub fn execute(&mut self) -> () {

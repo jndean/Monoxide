@@ -15,9 +15,9 @@ use crate::syntaxtree as ST;
 
 #[derive(Debug)]
 pub struct Variable {
-    id: usize,
+    id: isize,
     exteriors: RefCell<HashSet<String>>,
-    interiors: RefCell<HashSet<String>>
+    interiors: RefCell<HashSet<String>>,
 }
 
 impl Hash for Variable{
@@ -37,6 +37,7 @@ impl Eq for Variable {}
 pub struct Reference {
     is_interior: bool,
     is_borrowed: bool,
+    is_global: bool,
     register: usize,
     var: Rc<Variable>
 }
@@ -50,16 +51,16 @@ pub struct SyntaxContext<'a> {
     free_registers: Vec<usize>,
     locals: HashMap<String, Reference>,
     locals_stack: Vec<HashMap<String, Reference>>,
-    globals: &'a HashMap<String, usize>,
+    globals: &'a HashMap<String, Reference>,
     num_registers: usize,
-    last_var_id: usize
+    last_var_id: isize
 }
 
 
 impl<'a> SyntaxContext<'a> {
     pub fn new(
         functions: &'a HashMap<String, ST::FunctionPrototype>,
-        globals: &'a HashMap<String, usize>
+        globals: &'a HashMap<String, Reference>
     ) -> SyntaxContext<'a> {
         SyntaxContext {
             functions,
@@ -74,7 +75,7 @@ impl<'a> SyntaxContext<'a> {
         }
     }
 
-    pub fn new_variable_id(&mut self) -> usize {
+    pub fn new_variable_id(&mut self) -> isize {
         self.last_var_id += 1;
         self.last_var_id
     }
@@ -86,6 +87,7 @@ impl<'a> SyntaxContext<'a> {
             is_interior: false,
             register,
             is_borrowed,
+            is_global: false,
             var: Rc::new(Variable{
                 id: self.new_variable_id(),
                 exteriors: RefCell::new(exteriors),
@@ -138,7 +140,7 @@ impl<'a> SyntaxContext<'a> {
                             else           {var.exteriors.borrow_mut().insert(p.name.clone())};
                             self.locals.insert(
                                 p.name,
-                                Reference{is_interior, register, is_borrowed: true, var: Rc::clone(var)}
+                                Reference{is_interior, register, is_borrowed: true, is_global: false, var: Rc::clone(var)}
                             );
                         },
                         None => {
@@ -152,12 +154,12 @@ impl<'a> SyntaxContext<'a> {
                             let var = Rc::new(Variable{
                                 id: self.new_variable_id(),
                                 exteriors: RefCell::new(exteriors),
-                                interiors: RefCell::new(interiors),
+                                interiors: RefCell::new(interiors)
                             });
                             linked.insert(ext_link, Rc::clone(&var));
                             self.locals.insert(
                                 p.name,
-                                Reference{is_interior, register, is_borrowed: true, var}
+                                Reference{is_interior, register, is_borrowed: true, is_global: false, var}
                             );
                         }
                     }
@@ -226,6 +228,7 @@ impl<'a> SyntaxContext<'a> {
         for locals in self.locals_stack.iter().rev() {
             if let Some(var) = locals.get(name) { return var; }
         }
+        if let Some(var) = self.globals.get(name) { return var; }
         panic!(format!("Looking up non-existant variable \"{}\"", name));
     }
 
@@ -257,12 +260,17 @@ impl<'a> SyntaxContext<'a> {
         let src = self.lookup_variable(&lookup.name);
         
         let is_interior = src.is_interior || lookup.indices.len() > 0;
-        let mut register = src.register;
         let var = Rc::clone(&src.var);
         let is_borrowed = false;
+        let is_global = false;
+
+        let register = if is_interior || src.is_global {
+            self.get_free_register()
+        } else {
+            src.register
+        };
 
         if is_interior {
-            register = self.get_free_register();
             var.interiors.borrow_mut().insert(name.to_string());
         } else {
             var.exteriors.borrow_mut().insert(name.to_string());
@@ -270,7 +278,7 @@ impl<'a> SyntaxContext<'a> {
 
         self.locals.insert(
             name.to_string(),
-            Reference{is_interior, register, var, is_borrowed}
+            Reference{is_interior, register, var, is_borrowed, is_global}
         );
         register
     }
@@ -319,7 +327,7 @@ impl<'a> SyntaxContext<'a> {
         num_interiors == 0 || (num_interiors == 1 && varref.is_interior)
     }
 
-    fn get_var_id(&self, name: &str) -> usize {
+    fn get_var_id(&self, name: &str) -> isize {
         self.lookup_variable(name).var.id
     }
 
@@ -414,7 +422,9 @@ impl PT::Expression for PT::LookupNode {
 }
 impl PT::LookupNode {
     fn to_syntax_node_unboxed(self, ctx: &mut SyntaxContext) -> ST::LookupNode {
-        let register = ctx.lookup_variable(&self.name).register;
+        let var = ctx.lookup_variable(&self.name);
+        let register = var.register;
+        let is_global = var.is_global;
         let indices = self.indices.into_iter()
                                   .map(|i| i.to_syntax_node(ctx))
                                   .collect::<Vec<ST::ExpressionNode>>();
@@ -424,7 +434,7 @@ impl PT::LookupNode {
                                           .flat_map(|it| it.clone())
                                           .collect::<HashSet<_>>();
         used_vars.insert(ctx.get_var_id(&self.name));
-        ST::LookupNode{register, indices, used_vars, is_mono, var_is_mono}
+        ST::LookupNode{register, is_global, indices, used_vars, is_mono, var_is_mono}
     }
 }
 
@@ -694,18 +704,19 @@ impl PT::FunctionNode {
     fn to_syntax_node(
         self,
         func_lookup: &HashMap<String, ST::FunctionPrototype>,
-        global_register_names: &HashMap<String, usize>,
+        global_vars: &HashMap<String, Reference>,
     ) -> ST::FunctionNode {
-        self.to_syntax_node_and_register_names(func_lookup, global_register_names).0
+        let (syntax_node, _) = self.to_syntax_node_and_locals(func_lookup, global_vars);
+        syntax_node
     }
 
-    fn to_syntax_node_and_register_names(
+    fn to_syntax_node_and_locals(
         self,
         func_lookup: &HashMap<String, ST::FunctionPrototype>,
-        global_register_names: &HashMap<String, usize>,
-    ) -> (ST::FunctionNode, HashMap<String, usize>) {
+        global_vars: &HashMap<String, Reference>
+    ) -> (ST::FunctionNode, HashMap<String, Reference>) {
 
-        let mut ctx = SyntaxContext::new(func_lookup, global_register_names);
+        let mut ctx = SyntaxContext::new(func_lookup, global_vars);
         let (link_set, borrow_registers, steal_registers) = ctx.init_func(
             self.owned_links, self.borrow_params, self.steal_params);
         let stmts = self.stmts.into_iter()
@@ -718,9 +729,8 @@ impl PT::FunctionNode {
             consts: ctx.consts,
             num_registers: ctx.num_registers
         };
-        let register_names = ctx.locals.into_iter().map(|(name, var)| (name, var.register)).collect();
 
-        (function_node, register_names)
+        (function_node, ctx.locals)
     }
 
 }
@@ -824,16 +834,36 @@ pub fn check_syntax(module: PT::Module) -> ST::Module{
         }
     }
 
-    // Check the syntax of the global scope pseudo function, and get the global names
-    let (global_func, global_registers) 
-        = module.global_func.to_syntax_node_and_register_names(&func_prototypes, &HashMap::new());
+    // Check the syntax of the global scope pseudo function, and convert the variable into globals
+    let (global_func, mut global_refs) 
+        = module.global_func.to_syntax_node_and_locals(&func_prototypes, &HashMap::new());
+    let mut global_vars: HashMap<isize, Rc<Variable>> = HashMap::new();
+    for (_, reference) in global_refs.iter_mut() {
+        reference.is_global = true;
+        reference.is_borrowed = true;
+        reference.var = match global_vars.get(&reference.var.id) {
+            Some(var) => Rc::clone(var),
+            None => {
+                let var = Rc::new(Variable{
+                    id: -reference.var.id,  // Negative id for globals
+                    interiors: RefCell::new(reference.var.interiors.borrow().clone()),
+                    exteriors: RefCell::new(reference.var.exteriors.borrow().clone())
+                });
+                global_vars.insert(reference.var.id, Rc::clone(&var));
+                var
+            }
+        }
+    }
+    drop(global_vars);
+
+    
 
     // Check the syntax of each function, and find the main function
     let mut main_idx = None;
     let mut functions = Vec::with_capacity(module.functions.len());
     for (i, f) in module.functions.into_iter().enumerate() {
         if f.name == "main" {main_idx = Some(i)}
-        functions.push(f.to_syntax_node(&func_prototypes, &global_registers));
+        functions.push(f.to_syntax_node(&func_prototypes, &global_refs));
     }
 
     ST::Module{functions, main_idx, global_func}

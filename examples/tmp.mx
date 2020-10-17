@@ -1,26 +1,21 @@
 
-W := 100;
-H := 98;
-
-W += H;
+W := [1,2,3,4];
+H := 100;
 
 
 fn main()() {
 
-    X := [1, 2, 3, 4, 5];
+    x := &W;
+    x => func() => x;
+    
+    x += H;
 
-    println(X[4]);
-
-    run(X) => last;
-
-    last += 90;
-    println(X[4]);
-
-    catch(1);
+    println(W);
 
 } ~main()
 
 
-fn run(&a X)() {
-    last := &X[4];
-} ~run(&a last)
+
+fn func()(x) {
+    y := &x[0];
+} ~func(y)

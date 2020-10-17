@@ -143,20 +143,26 @@ Function promises not to do anything it can't do to interior refs, so caller may
 in anything not linked to other args
 
 # Linked references #
-fn F(&A X, &a x, &b Y)(&b y) {
+
+
+fn F(X, x, Y)(y) 
+   <X : x; Y : y, y2>
+{
   y =: &Y[0];
   y2 := &Y[0];
-} ~F(&b y2);
+} 
+~F(y2);
 
 Caller may pass in references to shared vars if they share label.
 Function still can't reshape any of the ref vars, since it might not
 know about all refs. Upper case for exterior, lower case for interior refs.
 
 # Owned linked references #
-fn F<A>(&A X){
+<X : x>
+fn F(X){
     col <= X;
     x := &x[0];
-} ~F(col, &a x);
+} ~F(col, x);
 
 Chevron notation before the args denotes any labels that are owned by the function.
 The caller must pass all references to the function. The function may reshape vars.
