@@ -22,7 +22,6 @@ pub struct Parser {
 
 #[derive(Debug)]
 pub struct ParseError {
-    filename: String,
     line: usize,
     col: usize
 }
@@ -176,7 +175,6 @@ pub fn parse(tokens: Vec<Token>) -> Result<Module, ParseError>{
     }
     let max_token = parser.max_token();
     Err(ParseError{
-        filename: String::from("Filename not implemented"),
         line: max_token.line,
         col: max_token.col
     })
@@ -198,15 +196,20 @@ impl Parser {
         self.tokens[self.max_token_pos].clone()
     }
 
-    fn expect_literal(&mut self, value: &str) -> bool {
+    fn expect_literal_with_src_line(&mut self, value: &str) -> Option<usize> {
         let pos = self.mark();
         if let Some(tokenref) =  self.tokens.get(pos).as_ref() {
             if tokenref.string_ == value {
+                let result = Some(tokenref.line.clone());
                 self.reset(pos + 1);
-                return true;
+                return result;
             };
         };
-        false
+        None
+    }
+
+    fn expect_literal(&mut self, value: &str) -> bool {
+        self.expect_literal_with_src_line(value).is_some()
     }
 
     fn expect_type(&mut self, type_: &str) -> Option<Token> {
@@ -593,24 +596,24 @@ impl Parser {
     pub fn print_stmt_(&mut self) -> Option<StatementNode> {
         let pos = self.mark();
         
-        if self.expect_literal("print") {
+        if let Some(src_line) = self.expect_literal_with_src_line("print") {
         if self.expect_literal("(") {
         let items = self.join(Parser::expression, ",");
         if self.expect_literal(")") {
         if self.expect_literal(";") {
             return Some(Box::new(
-                PrintNode{items, newline: false}
+                PrintNode{src_line, items, newline: false}
             ));
         }}}};
         self.reset(pos);
 
-        if self.expect_literal("println") {
+        if let Some(src_line) = self.expect_literal_with_src_line("println") {
         if self.expect_literal("(") {
         let items = self.join(Parser::expression, ",");
         if self.expect_literal(")") {
         if self.expect_literal(";") {
             return Some(Box::new(
-                PrintNode{items, newline: true}
+                PrintNode{src_line, items, newline: true}
             ));
         }}}};
 

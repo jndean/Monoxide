@@ -20,7 +20,7 @@ fn main() {
     let tokens = tokeniser::tokenise(&src);
     // println!("Tokens: {:#?}", tokens);
     let parsed = parser::parse(tokens).expect("Failed to parse");
-    let module = syntaxchecker::check_syntax(parsed);
+    let module = syntaxchecker::check_syntax(parsed).expect("Failed syntax check");
     // println!("Module: {:#?}", module);
     let program = module.compile();
     // println!("Compiled: {:#?}", program);

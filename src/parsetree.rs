@@ -8,7 +8,10 @@ use crate::syntaxtree as ST;
 
 
 pub trait Expression: fmt::Debug + ExpressionClone {
-    fn to_syntax_node(self: Box<Self>, ctx: &mut syntaxchecker::SyntaxContext) -> Box<dyn ST::Expression>;
+    fn to_syntax_node(
+        self: Box<Self>, 
+        ctx: &mut syntaxchecker::SyntaxContext
+    ) -> Result<Box<dyn ST::Expression>, syntaxchecker::SyntaxError>;
 }
 
 pub type ExpressionNode = Box<dyn Expression>;
@@ -79,7 +82,7 @@ pub trait Statement: fmt::Debug + StatementClone {
     fn to_syntax_node(
         self: Box<Self>,
         ctx: &mut syntaxchecker::SyntaxContext
-    ) -> Box<dyn ST::Statement>;
+    ) -> Result<Box<dyn ST::Statement>, syntaxchecker::SyntaxError>;
 }
 
 pub type StatementNode = Box<dyn Statement>;
@@ -101,6 +104,7 @@ impl Clone for StatementNode {
 
 #[derive(Clone, Debug)]
 pub struct PrintNode {
+    pub src_line: usize,
     pub items: Vec<ExpressionNode>,
     pub newline: bool
 }
