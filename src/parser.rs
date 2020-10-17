@@ -883,6 +883,14 @@ impl Parser {
         }};
         self.reset(pos);
 
+        if self.expect_literal("#") {
+        if let Some(expr) = self.atom() {
+            return Some(Box::new(
+                UniopNode{expr, op: Instruction::UniopLen}
+            ));
+        }};
+        self.reset(pos);
+
         None
     }
 

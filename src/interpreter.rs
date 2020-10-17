@@ -73,6 +73,13 @@ impl Variable {
         }
     }
 
+    fn get_array_length(&self) -> usize {
+        match self {
+            Variable::Array(items) => items.len(),
+            _ => panic!("Length operator (#) used on non-array")
+        }
+    }
+
     fn deep_copy(&self) -> Self {
         match self {
             Variable::Frac(value) => Variable::Frac(value.clone()),
@@ -130,7 +137,7 @@ pub enum Instruction {
     BinopLeq, BinopGeq, BinopLess, BinopGreat,
     BinopEq, BinopNeq,
     BinopIDiv, BinopMod, BinopPow,
-    UniopNeg, UniopNot,
+    UniopNeg, UniopNot, UniopLen,
     Reverse{idx: usize},
     Jump{ip: usize},
     JumpIfTrue{ip: usize},
@@ -322,6 +329,7 @@ impl<'a> Interpreter<'a> {
                     Instruction::BinopXor => self.binop_xor(),
                     Instruction::UniopNeg => self.uniop_neg(),
                     Instruction::UniopNot => self.uniop_not(),
+                    Instruction::UniopLen => self.uniop_len(),
                     Instruction::ArrayLiteral{size} => self.array_literal(*size),
                     Instruction::ArrayRepeat => self.array_repeat(),
                     Instruction::Pull{register} => self.pull(*register),
@@ -594,6 +602,18 @@ impl<'a> Interpreter<'a> {
         };
         self.stack.push(
             StackObject::Var(Rc::new(RefCell::new(result)))
+        );
+    }
+
+    fn uniop_len(&mut self) {
+        let expr = self.pop_var();
+        let len = expr.borrow().get_array_length();
+        self.stack.push(
+            StackObject::Var(Rc::new(RefCell::new(
+                Variable::Frac(Fraction::from_integer(
+                    num_bigint::BigInt::from(len)
+                ))
+            )))
         );
     }
 
