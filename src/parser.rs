@@ -196,11 +196,11 @@ impl Parser {
         self.tokens[self.max_token_pos].clone()
     }
 
-    fn expect_literal_with_src_line(&mut self, value: &str) -> Option<usize> {
+    fn expect_literal_with_src_position(&mut self, value: &str) -> Option<(usize, usize)> {
         let pos = self.mark();
         if let Some(tokenref) =  self.tokens.get(pos).as_ref() {
             if tokenref.string_ == value {
-                let result = Some(tokenref.line.clone());
+                let result = Some((tokenref.line.clone(), tokenref.col.clone()));
                 self.reset(pos + 1);
                 return result;
             };
@@ -209,7 +209,7 @@ impl Parser {
     }
 
     fn expect_literal(&mut self, value: &str) -> bool {
-        self.expect_literal_with_src_line(value).is_some()
+        self.expect_literal_with_src_position(value).is_some()
     }
 
     fn expect_type(&mut self, type_: &str) -> Option<Token> {
@@ -596,24 +596,24 @@ impl Parser {
     pub fn print_stmt_(&mut self) -> Option<StatementNode> {
         let pos = self.mark();
         
-        if let Some(src_line) = self.expect_literal_with_src_line("print") {
+        if self.expect_literal("print") {
         if self.expect_literal("(") {
         let items = self.join(Parser::expression, ",");
         if self.expect_literal(")") {
         if self.expect_literal(";") {
             return Some(Box::new(
-                PrintNode{src_line, items, newline: false}
+                PrintNode{items, newline: false}
             ));
         }}}};
         self.reset(pos);
 
-        if let Some(src_line) = self.expect_literal_with_src_line("println") {
+        if self.expect_literal("println") {
         if self.expect_literal("(") {
         let items = self.join(Parser::expression, ",");
         if self.expect_literal(")") {
         if self.expect_literal(";") {
             return Some(Box::new(
-                PrintNode{src_line, items, newline: true}
+                PrintNode{items, newline: true}
             ));
         }}}};
 
@@ -860,36 +860,45 @@ impl Parser {
         };
         
         if let Some(token) = self.expect_type("NUMBER") {
-            let value = Fraction::from_str(&token.string_[..]).unwrap();
-            let value = FractionNode{value};
-            return Some(Box::new(value));
+            return Some(Box::new(
+                FractionNode{
+                    value: Fraction::from_str(&token.string_[..]).unwrap(),
+                    line: token.line,
+                    col: token.col
+                }
+            ));
         };
 
         if let Some(token) = self.expect_type("STRING") {
-            let value = StringNode{value: token.string_.clone()};
-            return Some(Box::new(value));
+            return Some(Box::new(
+                StringNode{
+                    value: token.string_.clone(),
+                    line: token.line,
+                    col: token.col
+                }
+            ));
         };
 
-        if self.expect_literal("-") {
+        if let Some((line, col)) = self.expect_literal_with_src_position("-") {
         if let Some(expr) = self.atom() {
             return Some(Box::new(
-                UniopNode{expr, op: Instruction::UniopNeg}
+                UniopNode{expr, line, col, op: Instruction::UniopNeg}
             ));
         }};
         self.reset(pos);
 
-        if self.expect_literal("!") {
+        if let Some((line, col)) = self.expect_literal_with_src_position("!") {
         if let Some(expr) = self.atom() {
             return Some(Box::new(
-                UniopNode{expr, op: Instruction::UniopNot}
+                UniopNode{expr, line, col, op: Instruction::UniopNot}
             ));
         }};
         self.reset(pos);
 
-        if self.expect_literal("#") {
+        if let Some((line, col)) = self.expect_literal_with_src_position("#") {
         if let Some(expr) = self.atom() {
             return Some(Box::new(
-                UniopNode{expr, op: Instruction::UniopLen}
+                UniopNode{expr, line, col, op: Instruction::UniopLen}
             ));
         }};
         self.reset(pos);
@@ -901,10 +910,10 @@ impl Parser {
     pub fn array_literal_(&mut self) -> Option<ArrayLiteralNode> {
         let pos = self.mark();
 
-        if self.expect_literal("[") {
+        if let Some((line, col)) = self.expect_literal_with_src_position("[") {
         let items = self.join(Parser::expression, ",");
         if self.expect_literal("]") {
-            return Some(ArrayLiteralNode{items});
+            return Some(ArrayLiteralNode{line, col, items});
         }}
 
         self.reset(pos);
@@ -913,16 +922,17 @@ impl Parser {
 
     memoise!(array_repeat_ as array_repeat -> ArrayRepeatNode);
     pub fn array_repeat_(&mut self) -> Option<ArrayRepeatNode> {
-        parse!(self;
-            "[",
-            item : self.expression(),
-            "repeat",
-            dimensions : self.expression(),
-            "]",
-            {
-                return Some(ArrayRepeatNode{item, dimensions});
-            }
-        );
+        let pos = self.mark();
+
+        if let Some((line, col)) = self.expect_literal_with_src_position("[") {
+        if let Some(item) = self.expression() {
+        if self.expect_literal("repeat") {
+        if let Some(dimensions) = self.expression() {
+        if self.expect_literal("]") {
+            return Some(ArrayRepeatNode{item, dimensions, line, col});
+        }}}}}
+
+        self.reset(pos);
         None
     }
 
@@ -941,9 +951,9 @@ impl Parser {
     pub fn lookup_(&mut self) -> Option<LookupNode> {
         let pos = self.mark();
 
-        if let Some(name)    = self.name() {
+        if let Some((name, (line, col))) = self.name_with_src_position() {
         if let Some(indices) = self.repeat(Parser::index, true) {
-            return Some(LookupNode{name, indices});
+            return Some(LookupNode{name, indices, line, col});
         }};
 
         self.reset(pos);
@@ -966,14 +976,18 @@ impl Parser {
 
     memoise!(name_ as name -> String);
     pub fn name_(&mut self) -> Option<String> {
+        self.name_with_src_position().map(|x| x.0)
+    }
+
+    pub fn name_with_src_position(&mut self) -> Option<(String, (usize, usize))> {
         let pos = self.mark();
 
-        let has_dot = self.expect_literal(".");
+        let dot_pos = self.expect_literal_with_src_position(".");
         if let Some(token) = self.expect_type("NAME") {
-            return Some(
-                if has_dot { String::from(".") + &token.string_ }
-                else       { token.string_ }
-            );
+            return Some( match dot_pos {
+                Some(dot_pos) => (String::from(".") + &token.string_, dot_pos),
+                None => (token.string_, (token.line, token.col))
+            })
         };
 
         self.reset(pos);

@@ -359,6 +359,8 @@ impl<'a> SyntaxContext<'a> {
 // ---------------------------- Expression Nodes ---------------------------- //
 
 impl PT::Expression for PT::FractionNode {
+    fn get_line_col(self: Box<Self>) -> (usize, usize) { (self.line, self.col) }
+
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Expression>, SyntaxError> {
         let const_idx = ctx.add_const(
             interpreter::Variable::Frac(self.value)
@@ -368,6 +370,8 @@ impl PT::Expression for PT::FractionNode {
 }
 
 impl PT::Expression for PT::StringNode {
+    fn get_line_col(self: Box<Self>) -> (usize, usize) { (self.line, self.col) }
+
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Expression>, SyntaxError> {
         let const_idx = ctx.add_const(
             interpreter::Variable::Str(self.value)
@@ -377,6 +381,8 @@ impl PT::Expression for PT::StringNode {
 }
 
 impl PT::Expression for PT::BinopNode {
+    fn get_line_col(self: Box<Self>) -> (usize, usize) { self.lhs.get_line_col() }
+
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Expression>, SyntaxError> {
         let lhs = self.lhs.to_syntax_node(ctx)?;
         let rhs = self.rhs.to_syntax_node(ctx)?;
@@ -389,6 +395,8 @@ impl PT::Expression for PT::BinopNode {
 }
 
 impl PT::Expression for PT::UniopNode {
+    fn get_line_col(self: Box<Self>) -> (usize, usize) { (self.line, self.col) }
+
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Expression>, SyntaxError> {
         let expr = self.expr.to_syntax_node(ctx)?;
         let is_mono = expr.is_mono();
@@ -398,6 +406,8 @@ impl PT::Expression for PT::UniopNode {
 }
 
 impl PT::Expression for PT::ArrayLiteralNode {
+    fn get_line_col(self: Box<Self>) -> (usize, usize) { (self.line, self.col) }
+
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Expression>, SyntaxError> {
         let items = self.items.into_iter()
                               .map(|i| i.to_syntax_node(ctx))
@@ -411,6 +421,8 @@ impl PT::Expression for PT::ArrayLiteralNode {
 }
 
 impl PT::Expression for PT::ArrayRepeatNode {
+    fn get_line_col(self: Box<Self>) -> (usize, usize) { (self.line, self.col) }
+
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Expression>, SyntaxError> {
         let item = self.item.to_syntax_node(ctx)?;
         let dimensions = self.dimensions.to_syntax_node(ctx)?;
@@ -423,6 +435,8 @@ impl PT::Expression for PT::ArrayRepeatNode {
 }
 
 impl PT::Expression for PT::LookupNode {
+    fn get_line_col(self: Box<Self>) -> (usize, usize) { (self.line, self.col) }
+
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Expression>, SyntaxError> {
         Ok(Box::new(self.to_syntax_node_unboxed(ctx)?))
     }
@@ -585,7 +599,10 @@ impl PT::Statement for PT::ForNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Statement>, SyntaxError> {
 
         let mut zero_lookup = self.iterator.clone();
-        zero_lookup.indices.push(Box::new(PT::FractionNode{value: interpreter::Fraction::zero()}));
+        zero_lookup.indices.push(Box::new(PT::FractionNode{
+            value: interpreter::Fraction::zero(),
+            line: 0, col: 0
+        }));
         
         let register = ctx.create_ref(&self.iter_var, &zero_lookup);
         let iterator = self.iterator.to_syntax_node_unboxed(ctx)?;

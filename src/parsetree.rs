@@ -8,10 +8,12 @@ use crate::syntaxtree as ST;
 
 
 pub trait Expression: fmt::Debug + ExpressionClone {
-    fn to_syntax_node(
-        self: Box<Self>, 
-        ctx: &mut syntaxchecker::SyntaxContext
-    ) -> Result<Box<dyn ST::Expression>, syntaxchecker::SyntaxError>;
+
+    fn to_syntax_node(self: Box<Self>,  ctx: &mut syntaxchecker::SyntaxContext) 
+        -> Result<Box<dyn ST::Expression>, syntaxchecker::SyntaxError>;
+
+    fn get_line_col(self: Box<Self>) 
+        -> (usize, usize);
 }
 
 pub type ExpressionNode = Box<dyn Expression>;
@@ -33,6 +35,8 @@ impl Clone for ExpressionNode {
 
 #[derive(Clone)]
 pub struct FractionNode {
+    pub line: usize,
+    pub col: usize,
     pub value: interpreter::Fraction
 }
 
@@ -44,22 +48,30 @@ impl fmt::Debug for FractionNode {
 
 #[derive(Clone, Debug)]
 pub struct StringNode {
+    pub line: usize,
+    pub col: usize,
     pub value: String
 }
 
 #[derive(Clone, Debug)]
 pub struct ArrayLiteralNode {
+    pub line: usize,
+    pub col: usize,
     pub items: Vec<ExpressionNode>
 }
 
 #[derive(Clone, Debug)]
 pub struct ArrayRepeatNode {
+    pub line: usize,
+    pub col: usize,
     pub item: ExpressionNode,
     pub dimensions: ExpressionNode
 }
 
 #[derive(Clone, Debug)]
 pub struct LookupNode {
+    pub line: usize,
+    pub col: usize,
     pub name: String,
     pub indices: Vec<ExpressionNode>
 }
@@ -73,6 +85,8 @@ pub struct BinopNode {
 
 #[derive(Clone, Debug)]
 pub struct UniopNode {
+    pub line: usize,
+    pub col: usize,
     pub expr: ExpressionNode,
     pub op: interpreter::Instruction
 }
@@ -104,7 +118,6 @@ impl Clone for StatementNode {
 
 #[derive(Clone, Debug)]
 pub struct PrintNode {
-    pub src_line: usize,
     pub items: Vec<ExpressionNode>,
     pub newline: bool
 }
