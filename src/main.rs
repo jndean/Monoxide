@@ -12,6 +12,9 @@ mod syntaxchecker;
 mod compiler;
 mod parser;
 
+use syntaxchecker::{check_syntax, SyntaxError};
+
+
 type Fraction = num_rational::BigRational;
 
 fn main() {
@@ -20,7 +23,16 @@ fn main() {
     let tokens = tokeniser::tokenise(&src);
     // println!("Tokens: {:#?}", tokens);
     let parsed = parser::parse(tokens).expect("Failed to parse");
-    let module = syntaxchecker::check_syntax(parsed).expect("Failed syntax check");
+
+
+    let module = match check_syntax(parsed) {
+        Ok(module) => module,
+        Err(SyntaxError{line, col, desc}) => {
+            eprintln!("SyntaxError at line {}, column {}:\n ->  {}\n", line, col, desc);
+            return;
+        }
+    };
+
     // println!("Module: {:#?}", module);
     let program = module.compile();
     // println!("Compiled: {:#?}", program);

@@ -2,35 +2,13 @@
 
 fn main()() {
 
-    data := [0,0,0,3,3,3,3,3,5,5,5,4,4,4,4,4,4,4];
-    data => compress() => result;
-    println(result);
+    x := 0;
+    .y := 1;
+    for (i in x) {
+        x += .y;
+    };
+    x =: 0;
+
 
 } ~main()
 
-
-fn compress()(data) 
-{
-    output := [];
-
-    while (#data) {
-        current_symbol <= data;
-        count := 1;
-
-        while (#data & data[#data - 1] == current_symbol)
-        {
-            value <= data;
-            value =: current_symbol;
-            count += 1;
-        }
-        ~while (count > 1);
-
-        count => output;
-        current_symbol => output;
-
-    } ~while(#output);
-
-    println('Data: ', data);
-    data =: [];
-} 
-~compress(output)

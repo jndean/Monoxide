@@ -18,7 +18,10 @@ One of the key ways Monoxide differs from Railway as a language if the ability t
 ```Monoxide
 x := 8;
 y := &x;
+
 y += 1;
+
+y =: &x;
 x =: 9;
 ```
 
@@ -32,7 +35,7 @@ fn get_first(&a array)()
 ~get_first(&a first)
 ```
 
-Additionally for loops can not work by iterating a reference to the contents of arrays, unlike Railway which required the for loop to copy elements during iteration to avoid aliasing.
+Additionally for loops can now work by iterating a reference to the contents of arrays, unlike in Railway which required the for loop to copy elements during iteration to avoid aliasing.
 
 ```Monoxide
 X := [1, 2, 3, 4];
@@ -50,7 +53,7 @@ X[0] += x;              $ Not reversibe, won't compile! $
 
 for (x in X) {
     X[x] += 1;          $ Not reversible, won't compile! $ 
-}
+};
 ```
 
 

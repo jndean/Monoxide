@@ -11,6 +11,8 @@ use crate::interpreter;
 use crate::parsetree as PT;
 use crate::syntaxtree as ST;
 
+use PT::Expression as PTExpression;
+
 
 
 #[derive(Debug)]
@@ -359,7 +361,7 @@ impl<'a> SyntaxContext<'a> {
 // ---------------------------- Expression Nodes ---------------------------- //
 
 impl PT::Expression for PT::FractionNode {
-    fn get_line_col(self: Box<Self>) -> (usize, usize) { (self.line, self.col) }
+    fn get_src_pos(&self) -> (usize, usize) { (self.line, self.col) }
 
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Expression>, SyntaxError> {
         let const_idx = ctx.add_const(
@@ -370,7 +372,7 @@ impl PT::Expression for PT::FractionNode {
 }
 
 impl PT::Expression for PT::StringNode {
-    fn get_line_col(self: Box<Self>) -> (usize, usize) { (self.line, self.col) }
+    fn get_src_pos(&self) -> (usize, usize) { (self.line, self.col) }
 
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Expression>, SyntaxError> {
         let const_idx = ctx.add_const(
@@ -381,7 +383,7 @@ impl PT::Expression for PT::StringNode {
 }
 
 impl PT::Expression for PT::BinopNode {
-    fn get_line_col(self: Box<Self>) -> (usize, usize) { self.lhs.get_line_col() }
+    fn get_src_pos(&self) -> (usize, usize) { self.lhs.get_src_pos() }
 
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Expression>, SyntaxError> {
         let lhs = self.lhs.to_syntax_node(ctx)?;
@@ -395,7 +397,7 @@ impl PT::Expression for PT::BinopNode {
 }
 
 impl PT::Expression for PT::UniopNode {
-    fn get_line_col(self: Box<Self>) -> (usize, usize) { (self.line, self.col) }
+    fn get_src_pos(&self) -> (usize, usize) { (self.line, self.col) }
 
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Expression>, SyntaxError> {
         let expr = self.expr.to_syntax_node(ctx)?;
@@ -406,7 +408,7 @@ impl PT::Expression for PT::UniopNode {
 }
 
 impl PT::Expression for PT::ArrayLiteralNode {
-    fn get_line_col(self: Box<Self>) -> (usize, usize) { (self.line, self.col) }
+    fn get_src_pos(&self) -> (usize, usize) { (self.line, self.col) }
 
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Expression>, SyntaxError> {
         let items = self.items.into_iter()
@@ -421,7 +423,7 @@ impl PT::Expression for PT::ArrayLiteralNode {
 }
 
 impl PT::Expression for PT::ArrayRepeatNode {
-    fn get_line_col(self: Box<Self>) -> (usize, usize) { (self.line, self.col) }
+    fn get_src_pos(&self) -> (usize, usize) { (self.line, self.col) }
 
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Expression>, SyntaxError> {
         let item = self.item.to_syntax_node(ctx)?;
@@ -435,7 +437,7 @@ impl PT::Expression for PT::ArrayRepeatNode {
 }
 
 impl PT::Expression for PT::LookupNode {
-    fn get_line_col(self: Box<Self>) -> (usize, usize) { (self.line, self.col) }
+    fn get_src_pos(&self) -> (usize, usize) { (self.line, self.col) }
 
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Expression>, SyntaxError> {
         Ok(Box::new(self.to_syntax_node_unboxed(ctx)?))
@@ -511,14 +513,18 @@ impl PT::Statement for PT::RefUnrefNode {
 
 impl PT::Statement for PT::ModopNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Statement>, SyntaxError> {
+        let (line, col) = self.lookup.get_src_pos();
         let varname = self.lookup.name.clone();
         let lookup = self.lookup.to_syntax_node_unboxed(ctx)?;
         let rhs = self.rhs.to_syntax_node(ctx)?;
         let is_mono = lookup.var_is_mono;
-        if !is_mono { assert!(
-            !lookup.is_mono && !rhs.is_mono(),
-            "Modifying variable \"{}\" using mono information", varname
-        );}
+
+        if !is_mono && (lookup.is_mono || rhs.is_mono()) {
+            return Err(SyntaxError{line, col,
+                desc: format!("Modifying variable \"{}\" using mono information", varname)
+            })
+        }
+
         Ok(Box::new(ST::ModopNode{lookup, rhs, is_mono, op: self.op}))
     }
 }

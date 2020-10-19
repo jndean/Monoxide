@@ -12,7 +12,7 @@ pub trait Expression: fmt::Debug + ExpressionClone {
     fn to_syntax_node(self: Box<Self>,  ctx: &mut syntaxchecker::SyntaxContext) 
         -> Result<Box<dyn ST::Expression>, syntaxchecker::SyntaxError>;
 
-    fn get_line_col(self: Box<Self>) 
+    fn get_src_pos(&self) 
         -> (usize, usize);
 }
 
@@ -124,6 +124,8 @@ pub struct PrintNode {
 
 #[derive(Clone, Debug)]
 pub struct LetUnletNode {
+    // pub line: usize,
+    // pub col: usize,
     pub is_unlet: bool,
     pub name: String,
     pub rhs: ExpressionNode
