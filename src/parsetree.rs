@@ -124,8 +124,8 @@ pub struct PrintNode {
 
 #[derive(Clone, Debug)]
 pub struct LetUnletNode {
-    // pub line: usize,
-    // pub col: usize,
+    pub line: usize,
+    pub col: usize,
     pub is_unlet: bool,
     pub name: String,
     pub rhs: ExpressionNode
@@ -133,6 +133,8 @@ pub struct LetUnletNode {
 
 #[derive(Clone, Debug)]
 pub struct RefUnrefNode {
+    pub line: usize,
+    pub col: usize,
     pub is_unref: bool,
     pub name: String,
     pub rhs: LookupNode

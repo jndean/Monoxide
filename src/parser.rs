@@ -642,24 +642,24 @@ impl Parser {
     pub fn refunref_stmt_(&mut self) -> Option<StatementNode> {
         let pos = self.mark();
 
-        if let Some(name) = self.name() {
+        if let Some((name, (line, col))) = self.name_with_src_position() {
         if self.expect_literal(":=") {
         if self.expect_literal("&") {
         if let Some(rhs) = self.lookup() {
         if self.expect_literal(";") {
             return Some(Box::new(
-                RefUnrefNode{name, rhs, is_unref: false}
+                RefUnrefNode{name, rhs, line, col, is_unref: false}
             ));
         }}}}};
         self.reset(pos);
 
-        if let Some(name) = self.name() {
+        if let Some((name, (line, col))) = self.name_with_src_position() {
         if self.expect_literal("=:") {
         if self.expect_literal("&") {
         if let Some(rhs) = self.lookup() {
         if self.expect_literal(";") {
             return Some(Box::new(
-                RefUnrefNode{name, rhs, is_unref: true}
+                RefUnrefNode{name, rhs, line, col, is_unref: true}
             ));
         }}}}};
         self.reset(pos);
@@ -668,34 +668,30 @@ impl Parser {
     }
 
 
-    // rule!(letunlet_stmt -> StatementNode {
     memoise!(letunlet_stmt_ as letunlet_stmt -> StatementNode);
     pub fn letunlet_stmt_(&mut self) -> Option<StatementNode> {
-        
-        parse! (self;
-            name : self.name(),
-            ":=",
-            rhs : self.expression(),
-            ";",
-            {
-                return Some(Box::new(
-                    LetUnletNode{name, rhs, is_unlet: false}
-                ));
-            }
-        );
+        let pos = self.mark();
 
-        parse! (self;
-            name : self.name(),
-            "=:",
-            rhs : self.expression(),
-            ";",
-            {
-                return Some(Box::new(
-                    LetUnletNode{name, rhs, is_unlet: true}
-                ));
-            }
-        );
-     
+        if let Some((name, (line, col))) = self.name_with_src_position() {
+        if self.expect_literal(":=") {
+        if let Some(rhs) = self.expression() {
+        if self.expect_literal(";") {
+            return Some(Box::new(
+                LetUnletNode{name, rhs, line, col, is_unlet: false}
+            ));
+        }}}};
+        self.reset(pos);
+
+        if let Some((name, (line, col))) = self.name_with_src_position() {
+        if self.expect_literal("=:") {
+        if let Some(rhs) = self.expression() {
+        if self.expect_literal(";") {
+            return Some(Box::new(
+                LetUnletNode{name, rhs, line, col, is_unlet: true}
+            ));
+        }}}};
+        self.reset(pos);
+
         None
     }
 

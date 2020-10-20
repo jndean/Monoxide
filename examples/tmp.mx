@@ -2,12 +2,13 @@
 
 fn main()() {
 
-    x := 0;
+    x := 1;
     .y := 1;
-    for (i in x) {
-        x += .y;
-    };
-    x =: 0;
+    X := [1,2,3];
+
+    z := &X[.y];
+
+    println(z);
 
 
 } ~main()

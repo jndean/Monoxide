@@ -486,9 +486,13 @@ impl PT::Statement for PT::LetUnletNode {
         let rhs = self.rhs.to_syntax_node(ctx)?;
         let is_mono = self.name.starts_with(".");
 
-        assert!(is_mono || !rhs.is_mono(),
-            "Initialising variable \"{}\" using mono information", self.name
-        );
+        if !is_mono && rhs.is_mono() {
+            let verb = if is_unlet {"Uninitialising"} else {"Initialising"};
+            return Err(SyntaxError{
+                line: self.line, col: self.col,
+                desc: format!("{} variable \"{}\" using mono information", verb, self.name)
+            });
+        }
 
         Ok(Box::new(ST::LetUnletNode{is_unlet, register, rhs, is_mono}))
     }
@@ -502,10 +506,16 @@ impl PT::Statement for PT::RefUnrefNode {
         let rhs = self.rhs.to_syntax_node_unboxed(ctx)?;
         let is_mono = self.name.starts_with(".");
 
-        assert!(is_mono == rhs.is_mono,
-                "Reference \"{}\" cannot have different mono-ness to RHS", self.name);
-        assert!(is_mono == rhs.var_is_mono,
-                "Reference \"{}\" has different mono-ness to RHS variable", self.name);
+        let problem = if      is_mono != rhs.is_mono     {Some("RHS")}
+                      else if is_mono != rhs.var_is_mono {Some("RHS variable")}
+                      else                               {None};
+
+        if let Some(problem) = problem {
+            return Err(SyntaxError{
+                line: self.line, col: self.col,
+                desc: format!("Reference \"{}\" has different mono-ness to {}", self.name, problem)
+            });
+        }
 
         Ok(Box::new(ST::RefUnrefNode{is_unref, register, rhs, is_mono}))
     }
