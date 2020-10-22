@@ -542,22 +542,26 @@ impl PT::Statement for PT::ModopNode {
 impl PT::Statement for PT::PushPullNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Statement>, SyntaxError> {
 
-        // The lookup may have no other interior references
-        // (it may be an interior reference itself)
-        assert!(
-            ctx.check_ref_is_resizable(&self.lookup.name),
-            "Resizing {} when other references to its interior exist", self.lookup.name
-        );
-
+        let lookup_name = self.lookup.name.clone();
         let register = if self.is_push {ctx.remove_variable(&self.name)}
                        else            {ctx.create_variable(&self.name)};
         let lookup = self.lookup.to_syntax_node_unboxed(ctx)?;
         let is_mono = self.name.starts_with(".");
 
-        assert!(is_mono == lookup.var_is_mono,
-            "Can only push to / pull from a variable of matching mono-ness");
-        assert!(is_mono == lookup.is_mono,
-                "Mono information used to push/pull non-mono variable \"{}\"", self.name);
+
+        let error_msg = if !ctx.check_ref_is_resizable(&lookup_name) {
+            Some(format!("Resizing \"{}\" when other references to its interior exist", lookup_name))
+        } else if is_mono != lookup.var_is_mono {
+            Some(String::from("Can only push to / pull from a variable of matching mono-ness"))
+        } else if is_mono != lookup.is_mono {
+            Some(format!("Mono information used to push/pull non-mono variable \"{}\"", self.name))
+        } else {
+            None
+        };
+
+        if let Some(msg) = error_msg {
+            return Err(SyntaxError{line: self.line, col: self.col, desc: msg})
+        }
 
         Ok(Box::new(ST::PushPullNode{register, lookup, is_mono, is_push: self.is_push}))
     }
@@ -565,6 +569,9 @@ impl PT::Statement for PT::PushPullNode {
 
 impl PT::Statement for PT::IfNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Statement>, SyntaxError> {
+        let (fwd_line, fwd_col) = self.fwd_expr.get_src_pos();
+        let (bkwd_line, bkwd_col) = self.bkwd_expr.get_src_pos();
+
         let fwd_expr = self.fwd_expr.to_syntax_node(ctx)?;
         ctx.enter_block();
         let if_stmts = self.if_stmts.into_iter()
@@ -580,8 +587,14 @@ impl PT::Statement for PT::IfNode {
         let is_mono = fwd_expr.is_mono();
 
         let all_mono_stmts = if_stmts.iter().chain(else_stmts.iter()).all(|s| s.is_mono());
-        assert!(!is_mono || all_mono_stmts, "Non-mono statement in mono if-statement");
-        assert!(!bkwd_expr.is_mono(), "Backward condition in if statement is mono");
+        if fwd_expr.is_mono() && !all_mono_stmts {
+            return Err(SyntaxError{line: fwd_line, col: fwd_col, desc: String::from(
+                "Forward condition in If statement is mono but not all substatements are mono")})
+        }
+        if bkwd_expr.is_mono(){
+            return Err(SyntaxError{line: bkwd_line, col: bkwd_col, desc: String::from(
+                "Backward condition in If statement is mono")})
+        }
 
         Ok(Box::new(ST::IfNode{fwd_expr, if_stmts, else_stmts, bkwd_expr, is_mono}))
     }
@@ -589,6 +602,7 @@ impl PT::Statement for PT::IfNode {
 
 impl PT::Statement for PT::WhileNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Statement>, SyntaxError> {
+        let (line, col) = self.fwd_expr.get_src_pos();
         let fwd_expr = self.fwd_expr.to_syntax_node(ctx)?;
         ctx.enter_block();
         let stmts = self.stmts.into_iter()
@@ -602,9 +616,20 @@ impl PT::Statement for PT::WhileNode {
         
         let is_mono = fwd_expr.is_mono();
         let all_mono_stmts = stmts.iter().all(|s| s.is_mono());
-        assert!(!is_mono || all_mono_stmts, "Non-mono statement in mono while loop");
+
+        if is_mono && !all_mono_stmts {
+            return Err(SyntaxError{line, col, desc: 
+                String::from("Non-mono statement in mono while loop")});
+        }
+        if is_mono != bkwd_expr.is_none() {
+            return Err(SyntaxError{line, col, desc: String::from(
+                "A while loop's reverse condition must be omitted iff the loop is mono")});
+        }
         if let Some(expr) = &bkwd_expr {
-            assert!(!expr.is_mono(), "Backward condition in while loop is mono");
+            if expr.is_mono() {
+                return Err(SyntaxError{line, col, desc: 
+                    String::from("Backward condition in while loop is mono")});
+            }
         }
 
         Ok(Box::new(ST::WhileNode{fwd_expr, stmts, bkwd_expr, is_mono}))

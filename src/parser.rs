@@ -569,22 +569,22 @@ impl Parser {
     pub fn pull_stmt_(&mut self) -> Option<StatementNode> {
         let pos = self.mark();
         
-        if let Some(name) = self.name() {
+        if let Some((name, (line, col))) = self.name_with_src_position() {
         if self.expect_literal("<=") {
         if let Some(lookup) = self.lookup() {
         if self.expect_literal(";") {
             return Some(Box::new(
-                PushPullNode{is_push: false, name, lookup}
+                PushPullNode{is_push: false, name, lookup, line, col}
             ));    
         }}}};
         self.reset(pos);
         
-        if let Some(name) = self.name() {
+        if let Some((name, (line, col))) = self.name_with_src_position() {
         if self.expect_literal("=>") {
         if let Some(lookup) = self.lookup() {
         if self.expect_literal(";") {
             return Some(Box::new(
-                PushPullNode{is_push: true, name, lookup}
+                PushPullNode{is_push: true, name, lookup, line, col}
             ));    
         }}}};
         self.reset(pos);

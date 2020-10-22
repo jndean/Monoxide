@@ -192,7 +192,7 @@ impl ST::Expression for ST::LookupNode {
         for index in self.indices.iter().rev() {
             instructions.extend(index.compile());
         }
-        
+
         if self.is_global {
             instructions.push(Instruction::LoadGlobalRegister{register:self.register});
         } else {
@@ -442,7 +442,8 @@ impl ST::Statement for ST::WhileNode {
     
     fn compile(&self) -> Code {
         let fwd_expr = self.fwd_expr.compile();
-        let bkwd_expr = self.bkwd_expr.as_ref(). unwrap().compile();
+        // The backward condition can be None if the loop is mono
+        let bkwd_expr = self.bkwd_expr.as_ref().map(|e| e.compile());
         let mut stmts = Code::new();
         for stmt in self.stmts.iter() {
             stmts.extend(stmt.compile());
@@ -451,7 +452,6 @@ impl ST::Statement for ST::WhileNode {
         let stmts_fwd_len = stmts.fwd_len() as isize;
         let stmts_bkwd_len = stmts.bkwd_len() as isize;
         let fwd_expr_len = fwd_expr.len() as isize;
-        let bkwd_expr_len = bkwd_expr.len() as isize;
 
         let mut code = Code::new();
         
@@ -460,20 +460,26 @@ impl ST::Statement for ST::WhileNode {
         code.push_fwd(Instruction::RelativeJumpIfFalse{
             delta: stmts_fwd_len + 2
         });
-        code.push_bkwd(Instruction::RelativeJump{
-            delta: -stmts_bkwd_len - bkwd_expr_len - 1
-        });
+        if let Some(bkwd_expr) = &bkwd_expr {
+            code.push_bkwd(Instruction::RelativeJump{
+                delta: -stmts_bkwd_len - (bkwd_expr.len() as isize) - 1
+           })
+        }; 
 
         code.extend(stmts);
 
         code.push_fwd(Instruction::RelativeJump{
             delta: -stmts_fwd_len - fwd_expr_len - 1
         });
-        code.push_bkwd(Instruction::RelativeJumpIfFalse{
-            delta: stmts_bkwd_len + 2
-        });
 
-        code.append_bkwd(bkwd_expr);
+        
+        if let Some(bkwd_expr) = bkwd_expr {
+           code.push_bkwd(Instruction::RelativeJumpIfFalse{
+                delta: stmts_bkwd_len + 2
+            });
+            code.append_bkwd(bkwd_expr);
+        };
+
 
         if self.is_mono {code.clear_bkwd();}
         code

@@ -149,6 +149,8 @@ pub struct ModopNode {
 
 #[derive(Clone, Debug)]
 pub struct PushPullNode {
+    pub line: usize,
+    pub col: usize,
     pub is_push: bool,
     pub name: String,
     pub lookup: LookupNode
