@@ -683,11 +683,6 @@ impl PT::Statement for PT::ForNode {
                 i += 1;
             };
         is not invertible
-
-        TODO: Bug. It seems the itertation var is not properly linked as a ref to the iterator... can do
-            for (x in X) {
-                X[0] -= x;
-            };
         */
 
         Ok(Box::new(ST::ForNode{register, iterator, stmts, is_mono}))
