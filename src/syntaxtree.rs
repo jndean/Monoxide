@@ -48,7 +48,9 @@ pub struct LookupNode {
     pub indices: Vec<ExpressionNode>,
     pub is_mono: bool,
     pub var_is_mono: bool,
-    pub used_vars: HashSet<isize>
+    pub var_id: isize,
+    pub used_vars: HashSet<isize>,
+    pub index_used_vars: HashSet<isize>
 }
 
 #[derive(Debug)]

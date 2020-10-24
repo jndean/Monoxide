@@ -12,6 +12,7 @@ use crate::parsetree as PT;
 use crate::syntaxtree as ST;
 
 use PT::Expression as PTExpression;
+use ST::Expression as STExpression;
 
 
 
@@ -456,8 +457,12 @@ impl PT::LookupNode {
         let mut used_vars = indices.iter().map(|x| x.used_vars())
                                           .flat_map(|it| it.clone())
                                           .collect::<HashSet<_>>();
-        used_vars.insert(ctx.get_var_id(&self.name));
-        Ok(ST::LookupNode{register, is_global, indices, used_vars, is_mono, var_is_mono})
+
+        let index_used_vars = used_vars.clone();
+        let var_id = ctx.get_var_id(&self.name);
+        used_vars.insert(var_id);
+
+        Ok(ST::LookupNode{register, is_global, indices, used_vars, is_mono, var_is_mono, var_id, index_used_vars})
     }
 }
 
@@ -530,9 +535,19 @@ impl PT::Statement for PT::ModopNode {
         let is_mono = lookup.var_is_mono;
 
         if !is_mono && (lookup.is_mono || rhs.is_mono()) {
-            return Err(SyntaxError{line, col,
-                desc: format!("Modifying variable \"{}\" using mono information", varname)
-            })
+            return Err(SyntaxError{line, col, desc: format!(
+                "Modifying variable \"{}\" using mono information", varname
+            )});
+        }
+        if rhs.used_vars().contains(&lookup.var_id) {
+            return Err(SyntaxError{line, col, desc: format!(
+                "Self-modification of variable \"{}\"", varname
+            )});
+        }
+        if lookup.index_used_vars.contains(&lookup.var_id) {
+            return Err(SyntaxError{line, col, desc: format!(
+                "Variable \"{}\" is used to index itself, which can lead to self-modification", varname
+            )});
         }
 
         Ok(Box::new(ST::ModopNode{lookup, rhs, is_mono, op: self.op}))

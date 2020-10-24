@@ -2,20 +2,16 @@
 
 fn main()() {
 
-    .x := 0;
-    while (.x < 4) {
-        .x += 1;
-        println(.x);
-    } ~while();
+    X := [1,2,3,0];
+    Y := [1,2,3,4];
 
+    Z := [0, 1, 2, 3];
 
-    $
-    .X := [1, 2, 3, 4, 5];
+    for (x in X) {
+        X[0] += x;
+    };
 
-    if (.X[0] > 0) {
-        println('## Passed ##');
-    } ~if();
-    $
+    println(X, Y);
 
 } ~main()
 
