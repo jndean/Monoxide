@@ -240,7 +240,7 @@ impl<'a> SyntaxContext<'a> {
         }
         if let Some(var) = self.globals.get(name) { return Ok(var); }
         
-        Err(SyntaxError{line: 0, col: 0, desc: 
+        Err(SyntaxError{line: 0, col: 0, desc: // TODO: can pass line numbers through to here
             format!("Looking up non-existant variable \"{}\"", name)})
     }
 
@@ -254,19 +254,21 @@ impl<'a> SyntaxContext<'a> {
         }
     }
 
-    fn create_variable(&mut self, name: &str) -> usize {
+    fn create_variable(&mut self, name: &str) -> Result<usize, SyntaxError> {
         if self.locals.contains_key(name) {
-            panic!("Initialising a variable that already exists");
+            return Err(SyntaxError{line: 0, col: 0, desc: // TODO: can pass line numbers through to here
+                format!("A variable named \"{}\" already exists", name)});
         };
         let register = self.get_free_register();
         let new_var = self.new_variable(name.to_string(), register, false);
         self.locals.insert(name.to_string(), new_var);
-        register
+        Ok(register)
     }
 
     pub fn create_ref(&mut self, name: &str, lookup: &PT::LookupNode) -> Result<usize, SyntaxError> {
         if self.locals.contains_key(name) {
-            panic!("Initialising a reference that already exists");
+            return Err(SyntaxError{line: 0, col: 0, desc: // TODO: can pass line numbers through to here
+                format!("A variable named \"{}\" already exists", name)});
         };
 
         let src = self.lookup_variable(&lookup.name)?;
@@ -297,17 +299,34 @@ impl<'a> SyntaxContext<'a> {
 
 
     pub fn remove_ref(&mut self, name: &str, lookup: &PT::LookupNode) -> Result<usize, SyntaxError> {
+        let mut err = SyntaxError{line: 0, col: 0, desc: String::new()};  // TODO: can pass line numbers through to here
 
         match self.locals.remove(name) {
-            None => panic!("Removing non-existant reference"),
-            Some(Reference{is_borrowed: true, ..}) => panic!("Removing borrowed reference"),
+            None => {
+                err.desc = format!("Removing non-existant reference \"{}\"", name);
+                Err(err)
+            },
+            Some(Reference{is_borrowed: true, ..}) => {
+                err.desc = format!("Removing borrowed reference \"{}\"", name);
+                Err(err)
+            },
             Some(Reference{is_interior, register, var, ..}) => {
-                let is_interior = is_interior || lookup.indices.len() > 0;
+                // let is_interior = is_interior;
 
                 // Check they reference the same variable, and they're not deref'ing an exterior using an interior
-                let Reference{var: other_var, is_interior: other_is_interior, ..} = self.lookup_variable(&lookup.name)?;
-                if !Rc::ptr_eq(&var, other_var) || (*other_is_interior && !is_interior) {
-                    panic!("Unreferencing using incorrect variable");
+                let Reference{var: other_var, is_interior: mut other_is_interior, ..} = self.lookup_variable(&lookup.name)?;
+                other_is_interior |= lookup.indices.len() > 0;
+                if !Rc::ptr_eq(&var, other_var) {
+                    err.desc = format!(
+                        "Unreferencing \"{}\" using \"{}\" but they're different variables",
+                        name, lookup.name
+                    );
+                    return Err(err)
+                }
+                if other_is_interior != is_interior {
+                    err.desc = format!(
+                        "Mismatched interior/exterior reference when unreferencing \"{}\"", name);
+                    return Err(err)
                 }
 
                 // Deref
@@ -318,17 +337,28 @@ impl<'a> SyntaxContext<'a> {
         }
     }
 
-    fn remove_variable(&mut self, name: &str) -> usize {
+    fn remove_variable(&mut self, name: &str) -> Result<usize, SyntaxError> {
+        let mut err = SyntaxError{line: 0, col: 0, desc: String::new()};
+
         match self.locals.remove(name) {
-            None => panic!("Uninitialising non-existant variable"),
-            Some(Reference{is_borrowed: true, ..}) => panic!("Uninitialising borrowed variable"),
+            None => {
+                err.desc = format!("Uninitialising non-existant variable \"{}\"", name);
+                Err(err)
+            },
+            Some(Reference{is_borrowed: true, ..}) => {
+                err.desc = format!("Uninitialising borrowed variable \"{}\"", name);
+                Err(err)
+            },
             Some(Reference{var, register, ..}) => {
-                if !var.interiors.borrow().is_empty()
-                        || var.exteriors.borrow().len() > 1 {
-                    panic!("Uninitialising variable with other refs");
+                if !var.interiors.borrow().is_empty() || var.exteriors.borrow().len() > 1 {
+                    err.desc = format!(
+                        "Uninitialising variable \"{}\" which has other other references",
+                        name
+                    );
+                    return Err(err);
                 }
                 self.free_registers.push(register);
-                register
+                Ok(register)
             }
         }
     }
@@ -348,11 +378,13 @@ impl<'a> SyntaxContext<'a> {
         self.locals_stack.push(mem::replace(&mut self.locals, locals));
     }
 
-    fn exit_block(&mut self) {
+    fn exit_block(&mut self) -> Result<(), SyntaxError> {
         if self.locals.len() > 0 {
-            panic!("Leaving block with dangling variable references");
+            return Err(SyntaxError{line: 0, col: 0, desc:
+                String::from("Leaving block with dangling variable references")});
         }
         self.exit_block_nocheck();
+        Ok(())
     }
 
     fn exit_block_nocheck(&mut self) {
@@ -488,8 +520,8 @@ impl PT::Statement for PT::PrintNode {
 impl PT::Statement for PT::LetUnletNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Statement>, SyntaxError> {
         let is_unlet = self.is_unlet;
-        let register = if self.is_unlet {ctx.remove_variable(&self.name)}
-                       else             {ctx.create_variable(&self.name)};
+        let register = if self.is_unlet {ctx.remove_variable(&self.name)?}
+                       else             {ctx.create_variable(&self.name)?};
         let rhs = self.rhs.to_syntax_node(ctx)?;
         let is_mono = self.name.starts_with(".");
 
@@ -560,8 +592,8 @@ impl PT::Statement for PT::PushPullNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Statement>, SyntaxError> {
 
         let lookup_name = self.lookup.name.clone();
-        let register = if self.is_push {ctx.remove_variable(&self.name)}
-                       else            {ctx.create_variable(&self.name)};
+        let register = if self.is_push {ctx.remove_variable(&self.name)?}
+                       else            {ctx.create_variable(&self.name)?};
         let lookup = self.lookup.to_syntax_node_unboxed(ctx)?;
         let is_mono = self.name.starts_with(".");
 
@@ -670,7 +702,7 @@ impl PT::Statement for PT::ForNode {
         ctx.exit_block();
         let is_mono = self.iter_var.starts_with(".");
 
-        ctx.remove_ref(&self.iter_var, &zero_lookup);
+        ctx.remove_ref(&self.iter_var, &zero_lookup)?;
         
         if is_mono {
             if !iterator.var_is_mono {
@@ -797,7 +829,7 @@ impl PT::Statement for PT::CallNode {
                                           .collect::<Result<Vec<_>, _>>()?;
         let mut return_args = Vec::with_capacity(self.return_args.len());
         for arg in self.return_args.into_iter() {
-            return_args.push(ctx.create_variable(&arg));
+            return_args.push(ctx.create_variable(&arg)?);
             // TODO: Using create variable is WRONG
         }
         // TODO: Get is_mono from function prototype
