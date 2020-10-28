@@ -227,19 +227,21 @@ impl<'a> SyntaxContext<'a> {
         self.functions.get(name).expect("Undefined function")
     }
 
-    fn check_singly_owned(&self, name: &str) -> bool {
-        let var = &self.lookup_variable(name).var;
+    fn check_singly_owned(&self, name: &str) -> Result<bool, SyntaxError> {
+        let var = &self.lookup_variable(name)?.var;
         
-        var.interiors.borrow().len() == 0 && var.exteriors.borrow().len() == 1
+        Ok(var.interiors.borrow().len() == 0 && var.exteriors.borrow().len() == 1)
     }
 
-    fn lookup_variable(&self, name: &str) -> &Reference {
-        if let Some(var) = self.locals.get(name) { return var; }
+    fn lookup_variable(&self, name: &str) -> Result<&Reference, SyntaxError> {
+        if let Some(var) = self.locals.get(name) { return Ok(var); }
         for locals in self.locals_stack.iter().rev() {
-            if let Some(var) = locals.get(name) { return var; }
+            if let Some(var) = locals.get(name) { return Ok(var); }
         }
-        if let Some(var) = self.globals.get(name) { return var; }
-        panic!(format!("Looking up non-existant variable \"{}\"", name));
+        if let Some(var) = self.globals.get(name) { return Ok(var); }
+        
+        Err(SyntaxError{line: 0, col: 0, desc: 
+            format!("Looking up non-existant variable \"{}\"", name)})
     }
 
     fn get_free_register(&mut self) -> usize {
@@ -262,12 +264,12 @@ impl<'a> SyntaxContext<'a> {
         register
     }
 
-    pub fn create_ref(&mut self, name: &str, lookup: &PT::LookupNode) -> usize {
+    pub fn create_ref(&mut self, name: &str, lookup: &PT::LookupNode) -> Result<usize, SyntaxError> {
         if self.locals.contains_key(name) {
             panic!("Initialising a reference that already exists");
         };
 
-        let src = self.lookup_variable(&lookup.name);
+        let src = self.lookup_variable(&lookup.name)?;
         
         let is_interior = src.is_interior || lookup.indices.len() > 0;
         let var = Rc::clone(&src.var);
@@ -290,11 +292,11 @@ impl<'a> SyntaxContext<'a> {
             name.to_string(),
             Reference{is_interior, register, var, is_borrowed, is_global}
         );
-        register
+        Ok(register)
     }
 
 
-    pub fn remove_ref(&mut self, name: &str, lookup: &PT::LookupNode) -> usize {
+    pub fn remove_ref(&mut self, name: &str, lookup: &PT::LookupNode) -> Result<usize, SyntaxError> {
 
         match self.locals.remove(name) {
             None => panic!("Removing non-existant reference"),
@@ -303,7 +305,7 @@ impl<'a> SyntaxContext<'a> {
                 let is_interior = is_interior || lookup.indices.len() > 0;
 
                 // Check they reference the same variable, and they're not deref'ing an exterior using an interior
-                let Reference{var: other_var, is_interior: other_is_interior, ..} = self.lookup_variable(&lookup.name);
+                let Reference{var: other_var, is_interior: other_is_interior, ..} = self.lookup_variable(&lookup.name)?;
                 if !Rc::ptr_eq(&var, other_var) || (*other_is_interior && !is_interior) {
                     panic!("Unreferencing using incorrect variable");
                 }
@@ -311,7 +313,7 @@ impl<'a> SyntaxContext<'a> {
                 // Deref
                 var.interiors.borrow_mut().remove(name);
                 var.exteriors.borrow_mut().remove(name);
-                register
+                Ok(register)
             }
         }
     }
@@ -331,14 +333,14 @@ impl<'a> SyntaxContext<'a> {
         }
     }
 
-    fn check_ref_is_resizable(&self, name: &str) -> bool {
-        let varref = self.lookup_variable(name);
+    fn check_ref_is_resizable(&self, name: &str) -> Result<bool, SyntaxError> {
+        let varref = self.lookup_variable(name)?;
         let num_interiors = varref.var.interiors.borrow().len();
-        num_interiors == 0 || (num_interiors == 1 && varref.is_interior)
+        Ok(num_interiors == 0 || (num_interiors == 1 && varref.is_interior))
     }
 
-    fn get_var_id(&self, name: &str) -> isize {
-        self.lookup_variable(name).var.id
+    fn get_var_id(&self, name: &str) -> Result<isize, SyntaxError> {
+        Ok(self.lookup_variable(name)?.var.id)
     }
 
     fn enter_block(&mut self) {
@@ -446,7 +448,7 @@ impl PT::Expression for PT::LookupNode {
 }
 impl PT::LookupNode {
     fn to_syntax_node_unboxed(self, ctx: &mut SyntaxContext) -> Result<ST::LookupNode, SyntaxError> {
-        let var = ctx.lookup_variable(&self.name);
+        let var = ctx.lookup_variable(&self.name)?;
         let register = var.register;
         let is_global = var.is_global;
         let indices = self.indices.into_iter()
@@ -459,7 +461,7 @@ impl PT::LookupNode {
                                           .collect::<HashSet<_>>();
 
         let index_used_vars = used_vars.clone();
-        let var_id = ctx.get_var_id(&self.name);
+        let var_id = ctx.get_var_id(&self.name)?;
         used_vars.insert(var_id);
 
         Ok(ST::LookupNode{register, is_global, indices, used_vars, is_mono, var_is_mono, var_id, index_used_vars})
@@ -506,8 +508,8 @@ impl PT::Statement for PT::LetUnletNode {
 impl PT::Statement for PT::RefUnrefNode {
     fn to_syntax_node(self: Box<Self>, ctx: &mut SyntaxContext) -> Result<Box<dyn ST::Statement>, SyntaxError> {
         let is_unref = self.is_unref;
-        let register = if self.is_unref {ctx.remove_ref(&self.name, &self.rhs)}
-                       else             {ctx.create_ref(&self.name, &self.rhs)};
+        let register = if self.is_unref {ctx.remove_ref(&self.name, &self.rhs)?}
+                       else             {ctx.create_ref(&self.name, &self.rhs)?};
         let rhs = self.rhs.to_syntax_node_unboxed(ctx)?;
         let is_mono = self.name.starts_with(".");
 
@@ -564,18 +566,16 @@ impl PT::Statement for PT::PushPullNode {
         let is_mono = self.name.starts_with(".");
 
 
-        let error_msg = if !ctx.check_ref_is_resizable(&lookup_name) {
-            Some(format!("Resizing \"{}\" when other references to its interior exist", lookup_name))
+        let mut error = SyntaxError{line: self.line, col: self.col, desc: String::new()};
+        if !ctx.check_ref_is_resizable(&lookup_name)? {
+            error.desc = format!("Resizing \"{}\" when other references to its interior exist", lookup_name);
+            return Err(error);
         } else if is_mono != lookup.var_is_mono {
-            Some(String::from("Can only push to / pull from a variable of matching mono-ness"))
+            error.desc = String::from("Can only push to / pull from a variable of matching mono-ness");
+            return Err(error);
         } else if is_mono != lookup.is_mono {
-            Some(format!("Mono information used to push/pull non-mono variable \"{}\"", self.name))
-        } else {
-            None
-        };
-
-        if let Some(msg) = error_msg {
-            return Err(SyntaxError{line: self.line, col: self.col, desc: msg})
+            error.desc = format!("Mono information used to push/pull non-mono variable \"{}\"", self.name);
+            return Err(error);
         }
 
         Ok(Box::new(ST::PushPullNode{register, lookup, is_mono, is_push: self.is_push}))
@@ -660,7 +660,7 @@ impl PT::Statement for PT::ForNode {
             line: 0, col: 0
         }));
         
-        let register = ctx.create_ref(&self.iter_var, &zero_lookup);
+        let register = ctx.create_ref(&self.iter_var, &zero_lookup)?;
         let (iter_line, iter_col) = (self.iterator.line, self.iterator.col);
         let iterator = self.iterator.to_syntax_node_unboxed(ctx)?;
         ctx.enter_block();
@@ -742,6 +742,8 @@ impl PT::Statement for PT::CallNode {
             - Check linked params share a var
         */
 
+        let mut error = SyntaxError{line: self.line, col: self.col, desc: String::new()};
+
         let proto = ctx.lookup_function_prototype(&self.name);
         let func_idx = proto.id;
         let mut used_links: HashMap<Rc<Variable>, Option<String>> = HashMap::new();
@@ -749,19 +751,20 @@ impl PT::Statement for PT::CallNode {
 
         for (param, proto_link) in self.borrow_args.iter().zip(proto.borrow_params.iter()) {
 
-            let var = &ctx.lookup_variable(&param.name).var;
+            let var = &ctx.lookup_variable(&param.name)?.var;
             let link = proto_link.clone().map(|pl| pl.link).flatten();
             if let Some(other_link) = used_links.get(var) {
                 if link != *other_link {
-                    panic!("Passing incorrectly linked references")
+                    error.desc = String::from("Passing incorrectly linked references");
+                    return Err(error);
             }};
             used_links.insert(Rc::clone(var), link.clone());
             if let Some(link) = &link {
                 if let Some(other_var) = used_vars.get(link) {
                     if *var != *other_var {
-                        panic!("Passing incorrectly linked references");
-                    }
-                }
+                        error.desc = String::from("Passing incorrectly linked references");
+                        return Err(error);
+                }}
                 used_vars.insert(link.clone(), Rc::clone(var));
                 // done here?
             };
@@ -769,13 +772,15 @@ impl PT::Statement for PT::CallNode {
 
             match proto_link {
                 Some(proto_link) => {
-                    if !proto_link.is_interior && ctx.lookup_variable(&param.name).is_interior {
-                        panic!("Passing interior to function marked as exterior")
+                    if !proto_link.is_interior && ctx.lookup_variable(&param.name)?.is_interior {
+                        error.desc = String::from("Passing interior to function marked as exterior");
+                        return Err(error);
                     }
                 },
                 None => {
-                    if !ctx.check_singly_owned(&param.name) {
-                        panic!("Call uses non-singly owned variable");
+                    if !ctx.check_singly_owned(&param.name)? {
+                        error.desc = String::from("Call uses non-singly owned variable");
+                        return Err(error);
                     }
 
                 }
@@ -784,7 +789,7 @@ impl PT::Statement for PT::CallNode {
 
         let mut stolen_args = Vec::with_capacity(self.stolen_args.len());
         for arg in self.stolen_args.into_iter() {
-            stolen_args.push(ctx.lookup_variable(&arg).register);
+            stolen_args.push(ctx.lookup_variable(&arg)?.register);
             ctx.locals.remove(&arg);
         }
         let borrow_args = self.borrow_args.into_iter()

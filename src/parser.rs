@@ -211,7 +211,7 @@ impl Parser {
     fn expect_literal(&mut self, value: &str) -> bool {
         self.expect_literal_with_src_position(value).is_some()
     }
-
+    
     fn expect_type(&mut self, type_: &str) -> Option<Token> {
         let pos = self.mark();
         if let Some(tokenref) =  self.tokens.get(pos).as_ref() {
@@ -405,9 +405,13 @@ impl Parser {
         if self.expect_literal(")") {
         let return_args = self.return_args();
         if self.expect_literal(";") {
-            let name = name.string_;
             return Some(Box::new(
-                CallNode{is_uncall, name, borrow_args, stolen_args, return_args}
+                CallNode{
+                    name: name.string_,
+                    line: name.line,
+                    col: name.col,
+                    is_uncall, borrow_args, stolen_args, return_args
+                }
             ));
         }}}};
 

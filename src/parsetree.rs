@@ -192,6 +192,8 @@ pub struct CatchNode {
 #[derive(Clone, Debug)]
 pub struct CallNode {
     pub is_uncall: bool,
+    pub line: usize,
+    pub col: usize,
     pub name: String,
     pub borrow_args: Vec<LookupNode>,
     pub stolen_args: Vec<String>,
