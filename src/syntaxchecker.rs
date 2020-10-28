@@ -633,8 +633,8 @@ impl PT::Statement for PT::WhileNode {
         let all_mono_stmts = stmts.iter().all(|s| s.is_mono());
 
         if is_mono && !all_mono_stmts {
-            return Err(SyntaxError{line, col, desc: 
-                String::from("Non-mono statement in mono while loop")});
+            return Err(SyntaxError{line, col, desc: String::from(
+                "Non-mono statement in mono while loop")});
         }
         if is_mono != bkwd_expr.is_none() {
             return Err(SyntaxError{line, col, desc: String::from(
@@ -642,8 +642,8 @@ impl PT::Statement for PT::WhileNode {
         }
         if let Some(expr) = &bkwd_expr {
             if expr.is_mono() {
-                return Err(SyntaxError{line, col, desc: 
-                    String::from("Backward condition in while loop is mono")});
+                return Err(SyntaxError{line, col, desc: String::from(
+                    "Backward condition in while loop is mono")});
             }
         }
 
@@ -661,6 +661,7 @@ impl PT::Statement for PT::ForNode {
         }));
         
         let register = ctx.create_ref(&self.iter_var, &zero_lookup);
+        let (iter_line, iter_col) = (self.iterator.line, self.iterator.col);
         let iterator = self.iterator.to_syntax_node_unboxed(ctx)?;
         ctx.enter_block();
         let stmts = self.stmts.into_iter()
@@ -672,11 +673,24 @@ impl PT::Statement for PT::ForNode {
         ctx.remove_ref(&self.iter_var, &zero_lookup);
         
         if is_mono {
-            assert!(iterator.var_is_mono, "Mono for loop iterating over non-mono iterator");
-            assert!(stmts.iter().all(|s| s.is_mono()), "Non-mono statement in mono for loop");
-        } else {
-            assert!(!iterator.is_mono, "Assigning to non-mono iteration variable using mono information");
+            if !iterator.var_is_mono {
+                return Err(SyntaxError{
+                    line: iter_line, col: iter_col, desc: String::from(
+                        "Creating mono iteration var refernce to non-mono iterator")});
+            }
+            if !stmts.iter().all(|s| s.is_mono()) {
+                return Err(SyntaxError{
+                    line: iter_line, col: iter_col, desc: String::from(
+                        "Mono for loop contains some non-mono statements")});
+            }
+        } else if iterator.is_mono {
+            return Err(SyntaxError{
+                line: iter_line, col: iter_col, desc: format!(
+                    "Assigning to non-mono iteration variable \"{}\" using mono information",
+                    self.iter_var
+                )});
         }
+
         /* 
         TODO: disallow modification of iterator indices in for-loop body e.g. 
             for (_ in array[i]) {
