@@ -12,8 +12,6 @@ use crate::parsetree as PT;
 use crate::syntaxtree as ST;
 
 use PT::Expression as PTExpression;
-use ST::Expression as STExpression;
-
 
 
 #[derive(Debug)]
@@ -127,7 +125,8 @@ impl<'a> SyntaxContext<'a> {
         // Init borrowed params //
         let mut borrow_registers = Vec::with_capacity(borrows.len());
         let mut steal_registers = Vec::with_capacity(steals.len());
-        for (params, registers) in vec![(borrows, &mut borrow_registers), (steals, &mut steal_registers)] {
+        for (params, registers, is_borrowed) in vec![(borrows, &mut borrow_registers, true), 
+                                                     (steals,  &mut steal_registers, false)] {
             for p in params {
                 if self.locals.contains_key(&p.name) {
                     panic!("Duplicate function parameter names");
@@ -137,7 +136,7 @@ impl<'a> SyntaxContext<'a> {
 
                 if !p.is_ref {
                     // Singly owned //
-                    let new_var = self.new_variable(p.name.clone(), register, true);
+                    let new_var = self.new_variable(p.name.clone(), register, is_borrowed);
                     self.locals.insert(p.name, new_var);
 
                 } else if let Some(link) = p.link {
@@ -150,7 +149,7 @@ impl<'a> SyntaxContext<'a> {
                             else           {var.exteriors.borrow_mut().insert(p.name.clone())};
                             self.locals.insert(
                                 p.name,
-                                Reference{is_interior, register, is_borrowed: true, is_global: false, var: Rc::clone(var)}
+                                Reference{is_interior, register, is_borrowed, is_global: false, var: Rc::clone(var)}
                             );
                         },
                         None => {
@@ -169,14 +168,14 @@ impl<'a> SyntaxContext<'a> {
                             linked.insert(ext_link, Rc::clone(&var));
                             self.locals.insert(
                                 p.name,
-                                Reference{is_interior, register, is_borrowed: true, is_global: false, var}
+                                Reference{is_interior, register, is_borrowed, is_global: false, var}
                             );
                         }
                     }
 
                 } else {
                     // Unbound ref //
-                    let varref = self.new_variable(p.name.clone(), register, true);
+                    let varref = self.new_variable(p.name.clone(), register, is_borrowed);
                     varref.var.interiors.borrow_mut().insert(String::from("calling scope"));
                     self.locals.insert(p.name, varref);
                 }
@@ -624,12 +623,12 @@ impl PT::Statement for PT::IfNode {
         let if_stmts = self.if_stmts.into_iter()
                                     .map(|s| s.to_syntax_node(ctx))
                                     .collect::<Result<Vec<_>, _>>()?;
-        ctx.exit_block();
+        ctx.exit_block()?;
         ctx.enter_block();
         let else_stmts = self.else_stmts.into_iter()
                                     .map(|s| s.to_syntax_node(ctx))
                                     .collect::<Result<Vec<_>, _>>()?;
-        ctx.exit_block();
+        ctx.exit_block()?;
         let bkwd_expr = self.bkwd_expr.to_syntax_node(ctx)?;
         let is_mono = fwd_expr.is_mono();
 
@@ -655,7 +654,7 @@ impl PT::Statement for PT::WhileNode {
         let stmts = self.stmts.into_iter()
                               .map(|s| s.to_syntax_node(ctx))
                               .collect::<Result<Vec<_>, _>>()?;
-        ctx.exit_block();
+        ctx.exit_block()?;
         let bkwd_expr = match self.bkwd_expr {
             Some(expr) => Some(expr.to_syntax_node(ctx)?),
             None => None
@@ -699,7 +698,7 @@ impl PT::Statement for PT::ForNode {
         let stmts = self.stmts.into_iter()
                               .map(|s| s.to_syntax_node(ctx))
                               .collect::<Result<Vec<_>, _>>()?;
-        ctx.exit_block();
+        ctx.exit_block()?;
         let is_mono = self.iter_var.starts_with(".");
 
         ctx.remove_ref(&self.iter_var, &zero_lookup)?;
@@ -746,7 +745,7 @@ impl PT::Statement for PT::DoYieldNode {
         let yield_stmts = self.yield_stmts.into_iter()
                                           .map(|s| s.to_syntax_node(ctx))
                                           .collect::<Result<Vec<_>, _>>()?;
-        ctx.exit_block();
+        ctx.exit_block()?;
         ctx.exit_block_nocheck();  // The undo WILL free locals properly
 
         Ok(Box::new(ST::DoYieldNode{do_stmts, yield_stmts}))

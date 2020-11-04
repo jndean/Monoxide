@@ -212,9 +212,25 @@ impl ST::Expression for ST::BinopNode {
 
     fn compile(&self) -> Vec<Instruction> {
         let mut ret = Vec::new();
-        ret.extend(self.lhs.compile());
-        ret.extend(self.rhs.compile());
-        ret.push(self.op.clone());
+        let lhs = self.lhs.compile();
+        let rhs = self.rhs.compile();
+        if self.op == Instruction::BinopAnd {
+            ret.extend(lhs);
+            ret.push(Instruction::RelativeJumpIfTrue{delta: 3});
+            ret.push(Instruction::CreateInt{val: 0}); // Set False
+            ret.push(Instruction::RelativeJump{delta: (rhs.len() + 1) as isize});
+            ret.extend(rhs);
+        } else if self.op == Instruction::BinopOr {
+            ret.extend(lhs);
+            ret.push(Instruction::RelativeJumpIfFalse{delta: 3});
+            ret.push(Instruction::CreateInt{val: 1}); // Set True
+            ret.push(Instruction::RelativeJump{delta: (rhs.len() + 1) as isize});
+            ret.extend(rhs);
+        } else {
+            ret.extend(lhs);
+            ret.extend(rhs);
+            ret.push(self.op.clone());
+        }
         ret
     }
 }

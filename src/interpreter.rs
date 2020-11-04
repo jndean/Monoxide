@@ -68,7 +68,9 @@ impl Variable {
 
     fn to_usize(&self) -> usize {
         match self {
-            Variable::Frac(value) => value.to_integer().to_usize().unwrap(),
+            Variable::Frac(value) => {
+                value.to_integer().to_usize().unwrap()
+            },
             _ => panic!("Index is not a number")
         }
     }
@@ -120,7 +122,7 @@ enum StackObject {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Instruction {
     LoadConst{idx: usize},
     LoadGlobalRegister{register: usize},
@@ -132,6 +134,7 @@ pub enum Instruction {
     Store,
     Pull{register: usize},
     Push{register: usize},
+    CreateInt{val: isize},
     BinopAdd, BinopSub, BinopMul, BinopDiv,
     BinopOr, BinopAnd, BinopXor, 
     BinopLeq, BinopGeq, BinopLess, BinopGreat,
@@ -243,19 +246,6 @@ macro_rules! bincomp_method {
     };
 }
 
-macro_rules! binlogic_method {
-    ($name:ident, $op:tt) => {
-        fn $name (&mut self) {
-            let rhs = self.pop_var();
-            let lhs = self.pop_var();
-            let result = lhs.borrow().to_bool() $op rhs.borrow().to_bool();
-            let var = if result {Variable::Frac(Fraction::one())}
-                      else      {Variable::Frac(Fraction::zero())};
-            self.stack.push(StackObject::Var(Rc::new(RefCell::new(var))));
-        }
-    };
-}
-
 impl<'a> Interpreter<'a> {
 
     pub fn run(module: &Module) {
@@ -272,8 +262,8 @@ impl<'a> Interpreter<'a> {
             global_registers: vec![None; global_func.num_registers],
             consts: &global_func.consts
         };
-        interpreter.execute();
-        interpreter.call(main_idx, true);
+        interpreter.execute();  // Execute the global scope
+        interpreter.call(main_idx, true);  // Initialise call to main
         interpreter.execute();
     }
 
@@ -311,6 +301,7 @@ impl<'a> Interpreter<'a> {
                     Instruction::Subscript{size} => self.subscript(*size),
                     Instruction::DuplicateRef => self.duplicate_ref(),
                     Instruction::UniqueVar => self.copy_var(),
+                    Instruction::CreateInt{val} => self.create_int(*val),
                     Instruction::BinopAdd => self.binop_add(),
                     Instruction::BinopSub => self.binop_sub(),
                     Instruction::BinopMul => self.binop_mul(),
@@ -324,8 +315,6 @@ impl<'a> Interpreter<'a> {
                     Instruction::BinopGeq => self.binop_geq(),
                     Instruction::BinopEq => self.binop_eq(),
                     Instruction::BinopNeq => self.binop_neq(),
-                    Instruction::BinopAnd => self.binop_and(),
-                    Instruction::BinopOr => self.binop_or(),
                     Instruction::BinopXor => self.binop_xor(),
                     Instruction::UniopNeg => self.uniop_neg(),
                     Instruction::UniopNot => self.uniop_not(),
@@ -347,6 +336,9 @@ impl<'a> Interpreter<'a> {
                     Instruction::Quit => break 'refresh_instructions,
                     Instruction::DebugPrint => self.debug_print(),
 
+                    
+                    Instruction::BinopAnd => unimplemented!("BinopAnd"),
+                    Instruction::BinopOr => unimplemented!("BinopOr"),
                     Instruction::RelativeJump{delta: _} => unimplemented!("RelativeJump"),
                     Instruction::RelativeJumpIfTrue{delta: _} => unimplemented!("RelativeJumpIfTrue"),
                     Instruction::RelativeJumpIfFalse{delta: _} => unimplemented!("RelativeJumpIfFalse")
@@ -525,6 +517,14 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    fn create_int(&mut self, val: isize) {
+        self.stack.push(StackObject::Var(Rc::new(RefCell::new(
+            Variable::Frac(Fraction::from_integer(
+                num_bigint::BigInt::from(val)
+            ))
+        ))));
+    }
+
     binop_method!(binop_add, +);
     binop_method!(binop_sub, -);
     binop_method!(binop_mul, *);
@@ -536,9 +536,12 @@ impl<'a> Interpreter<'a> {
     bincomp_method!(binop_great, > );
     bincomp_method!(binop_geq,   >=);
     
-    binlogic_method!(binop_and, &&);
-    binlogic_method!(binop_or,  ||);
-    binlogic_method!(binop_xor, ^) ;
+    fn binop_xor (&mut self) {
+        let rhs = self.pop_var();
+        let lhs = self.pop_var();
+        let result = lhs.borrow().to_bool() ^ rhs.borrow().to_bool();
+        self.create_int(if result {1} else {0});
+    }
 
     fn binop_idiv(&mut self) {
         let rhs = self.pop_var();
