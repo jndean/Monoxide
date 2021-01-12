@@ -222,8 +222,10 @@ impl<'a> SyntaxContext<'a> {
         self.consts.len() - 1
     }
 
-    fn lookup_function_prototype(&self, name: &str) -> &ST::FunctionPrototype {
-        self.functions.get(name).expect("Undefined function")
+    fn lookup_function_prototype(&self, name: &str) -> Result<&ST::FunctionPrototype, SyntaxError> {
+        self.functions.get(name).ok_or(
+            SyntaxError{line: 0, col: 0, desc: format!("Undefined function \"{}\"", name)}
+        )
     }
 
     fn check_singly_owned(&self, name: &str) -> Result<bool, SyntaxError> {
@@ -775,7 +777,7 @@ impl PT::Statement for PT::CallNode {
 
         let mut error = SyntaxError{line: self.line, col: self.col, desc: String::new()};
 
-        let proto = ctx.lookup_function_prototype(&self.name);
+        let proto = ctx.lookup_function_prototype(&self.name)?;
         let func_idx = proto.id;
         let mut used_links: HashMap<Rc<Variable>, Option<String>> = HashMap::new();
         let mut used_vars: HashMap<String, Rc<Variable>> = HashMap::new();
