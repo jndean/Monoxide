@@ -607,6 +607,7 @@ impl ST::FunctionNode {
         }
         for &register in &self.steal_registers {
             code.push_fwd(Instruction::StoreRegister{register});
+            code.push_bkwd(Instruction::LoadRegister{register});
         }
 
         for stmt in &self.stmts {
@@ -615,6 +616,10 @@ impl ST::FunctionNode {
 
         for &register in &self.return_registers {
             code.push_fwd(Instruction::LoadRegister{register});
+            code.push_bkwd(Instruction::StoreRegister{register});
+        }
+        for &register in &self.borrow_registers {
+            code.push_bkwd(Instruction::StoreRegister{register});
         }
 
         interpreter::Function{
@@ -624,6 +629,7 @@ impl ST::FunctionNode {
         }
     }
 
+    // Compile as the special 'global function' which is run for the global scope before main
     pub fn compile_to_global(&self) -> interpreter::Function {
         let mut func = self.compile();
         for instruction in func.code.fwd.iter_mut().chain(func.code.bkwd.iter_mut()) {
