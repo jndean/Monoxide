@@ -170,14 +170,16 @@ macro_rules! memoise_recursive {
 
 pub fn parse(tokens: Vec<Token>) -> Result<Module, ParseError>{
     let mut parser = Parser{tokens, token_pos: 0, max_token_pos: 0, memo: HashMap::new()};
-    if let Some(module) = parser.module() {
-        return Ok(module);
+    match parser.module() {
+        Some(module) => Ok(module),
+        None => {
+            let max_token = parser.max_token();
+            Err(ParseError{
+                line: max_token.line,
+                col: max_token.col
+            })
+        }
     }
-    let max_token = parser.max_token();
-    Err(ParseError{
-        line: max_token.line,
-        col: max_token.col
-    })
 }
 
 
@@ -647,7 +649,7 @@ impl Parser {
         let pos = self.mark();
 
         if let Some((name, (line, col))) = self.name_with_src_position() {
-        if self.expect_literal(":=") {
+        if self.expect_literal("=") {
         if self.expect_literal("&") {
         if let Some(rhs) = self.lookup() {
         if self.expect_literal(";") {
@@ -658,7 +660,7 @@ impl Parser {
         self.reset(pos);
 
         if let Some((name, (line, col))) = self.name_with_src_position() {
-        if self.expect_literal("=:") {
+        if self.expect_literal("~=") {
         if self.expect_literal("&") {
         if let Some(rhs) = self.lookup() {
         if self.expect_literal(";") {
@@ -677,7 +679,7 @@ impl Parser {
         let pos = self.mark();
 
         if let Some((name, (line, col))) = self.name_with_src_position() {
-        if self.expect_literal(":=") {
+        if self.expect_literal("=") {
         if let Some(rhs) = self.expression() {
         if self.expect_literal(";") {
             return Some(Box::new(
@@ -687,7 +689,7 @@ impl Parser {
         self.reset(pos);
 
         if let Some((name, (line, col))) = self.name_with_src_position() {
-        if self.expect_literal("=:") {
+        if self.expect_literal("~=") {
         if let Some(rhs) = self.expression() {
         if self.expect_literal(";") {
             return Some(Box::new(

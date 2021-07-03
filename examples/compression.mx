@@ -2,7 +2,7 @@
 
 fn main()() {
     
-    data := [0,0,0,3,3,3,3,3,5,5,5,4,4,4,4,4,4,4];
+    data = [0,0,0,3,3,3,3,3,5,5,5,4,4,4,4,4,4,4];
     println(data);
 
     data => compress() => result;
@@ -11,23 +11,23 @@ fn main()() {
     result => ~compress() => data;
     println(data);
 
-    data =: [0,0,0,3,3,3,3,3,5,5,5,4,4,4,4,4,4,4];
+    data ~= [0,0,0,3,3,3,3,3,5,5,5,4,4,4,4,4,4,4];
 
 } ~main()
 
 
 fn compress()(data) 
 {
-    output := [];
+    output = [];
 
     while (#data) {
         current_symbol <= data;
-        count := 1;
+        count = 1;
 
         while (#data & data[#data - 1] == current_symbol)
         {
             value <= data;
-            value =: current_symbol;
+            value ~= current_symbol;
             count += 1;
         }
         ~while (count > 1);
@@ -37,6 +37,6 @@ fn compress()(data)
 
     } ~while(#output);
 
-    data =: [];
+    data ~= [];
 } 
 ~compress(output)

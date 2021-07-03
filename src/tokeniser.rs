@@ -21,7 +21,7 @@ pub fn tokenise(data: &String) -> Vec<Token> {
     let symbol_regex = regex::Regex::new(&(String::from(r"^(")
     + r"\+=|\-=|\*=|/="
     + r"|<=|>=|!=|=="
-    + r"|:=|=:|=>|//|\*\*"
+    + r"|~=|=>|//|\*\*"
     + r"|\+|\-|\*|/"
     + r"|=|<|>"
     + r"|\[|\]|\(|\)|\{|\}"
@@ -68,8 +68,14 @@ pub fn tokenise(data: &String) -> Vec<Token> {
         }
 
         if let Some(m) = ignore_regex.find(&data[pos..]) {
+            let newlines:Vec<_> = data[pos .. pos + m.end()].match_indices("\n").collect();
             pos += m.end();
-            col += m.end();
+            line += newlines.len();
+            if let Some(idx) = newlines.last() {
+                col = m.end() - 1 - idx.0;
+            } else {
+                col += m.end();
+            }
             continue;
         }
 
